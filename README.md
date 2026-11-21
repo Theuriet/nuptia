@@ -1,25 +1,41 @@
-# NUPTIA — prototype initial
+# NUPTIA — prototype enrichi (V2)
 
-Cette version est un prototype web statique, pensé pour être testé depuis un téléphone ou un ordinateur.
+NUPTIA est un prototype mobile-first de gestion d'invitations de mariage.
 
-## Contenu
-- `index.html` : application complète (interface, styles et logique).
-- Plusieurs espaces de mariage indépendants dans le navigateur.
-- Tableau de bord, gestion des invités, tables et contrôle manuel des entrées.
-- Invitation publique et invitation personnalisée par code.
-- QR code généré dans le navigateur (connexion Internet nécessaire pour charger la bibliothèque QR).
-- Partage manuel par WhatsApp classique (pas de WhatsApp Business).
-- Interface français / anglais.
+## Fonctionnalités conservées
+- Tableau de bord et espaces de mariage multiples
+- Liste des invités, nombre de places et statut RSVP
+- Attribution des invités aux tables avec contrôle de capacité
+- Accueil / check-in des invités
+- Liens d'invitation publique et personnalisée
+- QR code pour l'invitation individuelle
+- Partage par WhatsApp standard et copie du lien
+- Interface français / anglais
 
-## Lancer le prototype
-Ouvrir `index.html` dans un navigateur moderne. Pour partager les invitations par de vrais liens, publier le dossier sur GitHub Pages, Netlify ou Vercel.
+## Nouveaux ajouts V2
+Dans la rubrique **Personnaliser** (menu de gauche), l'organisateur peut ajouter :
+- Photo des mariés (sélection depuis le téléphone, optimisation automatique)
+- Histoire du couple et message d'invitation
+- Date du mariage
+- Lieu de cérémonie et lieu de réception
+- Lien Google Maps
+- Lien direct vers une musique audio (MP3 ou autre fichier audio accessible)
+- Dress code, note et programme de la journée
+- Prévisualisation de l'invitation
 
-## Important — limites de cette première version
-- Les données sont enregistrées dans le `localStorage` du navigateur utilisé. Elles ne sont pas encore synchronisées entre plusieurs téléphones ou utilisateurs.
-- Ce n'est pas encore une application multi-clients sécurisée : les rôles administrateur / organisateur / protocole, l'authentification, une base de données distante, les sauvegardes et la synchronisation hors ligne devront être ajoutés avant un usage réel.
-- Le QR est un identifiant de démonstration ; le contrôle d'accès devra être validé côté serveur dans la version de production.
-- Les liens de partage ne fonctionneront publiquement qu'après publication sur un hébergement web.
-- La date de mariage est facultative : le compte à rebours n'est pas affiché tant qu'elle n'est pas définie.
+## Installation sur GitHub Pages
+1. Décompresser l'archive.
+2. Ouvrir le dépôt GitHub `nuptia`.
+3. Remplacer le fichier `index.html` à la racine par celui du dossier `NUPTIA`.
+4. Remplacer également `README.md` si souhaité.
+5. Commit les modifications. GitHub Pages republiera le site.
 
-## Prochaine étape
-Publier ce prototype sur GitHub Pages ou Vercel, puis le tester sur Android. Ensuite, construire la base de données et l'authentification pour permettre le partage réel des données entre plusieurs appareils.
+## Limites importantes du prototype
+- Les données sont conservées dans le `localStorage` du navigateur de l'appareil utilisé.
+- La photo est optimisée puis conservée dans ce stockage local. Éviter les photos très lourdes.
+- La musique doit être fournie par une URL directe vers un fichier audio accessible ; un lien vers une page YouTube ou Spotify ne suffit pas.
+- Les données ne sont pas encore synchronisées entre plusieurs téléphones ou comptes.
+- Les liens d'invitation personnalisés ne deviennent réellement partageables entre appareils qu'après mise en place d'une base de données et d'un stockage en ligne.
+- Il n'y a pas encore de véritable authentification, de rôles organisateur, ni de sécurité multi-utilisateur.
+
+Cette V2 est un prototype enrichi et non une plateforme de production. La prochaine phase doit intégrer une authentification et un backend (base de données + stockage des photos et médias) avant une utilisation commerciale ou la gestion de vrais événements.
