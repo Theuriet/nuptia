@@ -9,89 +9,1610 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--ink:#29251f;--muted:#81796f;--gold:#a9864d;--gold2:#d7bd8d;--cream:#f7f3ec;--paper:#fffdf9;--line:#e9e1d5;--green:#55745f;--red:#a75e54;--shadow:0 14px 40px #4a38200d}
-*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font-family:"DM Sans",sans-serif}button,input,select{font:inherit}button{cursor:pointer}.serif{font-family:"Playfair Display",serif}.app{min-height:100vh}.topbar{height:76px;padding:0 clamp(18px,5vw,64px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:#fffdf9eF;position:sticky;top:0;z-index:5;backdrop-filter:blur(12px)}.brand{display:flex;align-items:center;gap:12px}.brand-mark{width:38px;height:38px;border:1px solid var(--gold2);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-family:Georgia;font-size:21px}.brand-name{font-family:"Playfair Display",serif;font-size:22px;letter-spacing:3px}.brand-sub{font-size:9px;color:var(--muted);letter-spacing:1.8px;text-transform:uppercase}.top-actions{display:flex;gap:10px;align-items:center}.btn{border:1px solid var(--line);background:white;color:var(--ink);padding:11px 16px;border-radius:7px;font-weight:600;font-size:13px}.btn:hover{border-color:var(--gold)}.btn.primary{background:var(--ink);color:white;border-color:var(--ink)}.btn.gold{background:var(--gold);color:white;border-color:var(--gold)}.btn.ghost{background:transparent}.layout{display:grid;grid-template-columns:230px 1fr;max-width:1440px;margin:auto;min-height:calc(100vh - 76px)}.sidebar{padding:30px 18px;border-right:1px solid var(--line);background:#fbf8f2}.side-label{font-size:10px;letter-spacing:1.6px;color:#a59b8e;text-transform:uppercase;padding:0 12px;margin:12px 0}.nav{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;padding:12px;border-radius:7px;color:#6f685e;text-align:left;margin:3px 0;font-size:13px}.nav.active,.nav:hover{background:#efe7da;color:var(--ink)}.nav .ico{width:20px;text-align:center;color:var(--gold)}.main{padding:clamp(22px,4vw,54px);min-width:0}.eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700}.page-title{font:500 clamp(29px,4vw,42px) "Playfair Display",serif;margin:8px 0}.sub{color:var(--muted);font-size:14px;line-height:1.7}.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:28px}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:26px 0}.stat,.panel,.wedding-card{background:var(--paper);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}.stat{padding:20px}.stat-label{font-size:12px;color:var(--muted)}.stat-num{font:500 32px "Playfair Display",serif;margin-top:8px}.panel{padding:22px;margin:18px 0}.panel h3{font:500 21px "Playfair Display",serif;margin:0 0 6px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px}.wedding-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.wedding-card{overflow:hidden}.card-cover{height:115px;background:linear-gradient(120deg,#e9dfce,#f8f2e8 60%,#d9c7a8);display:flex;align-items:center;justify-content:center;color:#a9864d;font:italic 28px "Playfair Display",serif}.wedding-body{padding:18px}.wedding-body h3{font:500 23px "Playfair Display",serif;margin:0 0 6px}.meta{font-size:12px;color:var(--muted);margin:5px 0 14px}.actions{display:flex;gap:8px;flex-wrap:wrap}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th{text-align:left;color:#8d8377;font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:12px 10px;border-bottom:1px solid var(--line)}td{padding:13px 10px;border-bottom:1px solid #f0ebe3}tr:last-child td{border-bottom:0}.pill{display:inline-block;padding:5px 9px;border-radius:30px;background:#f1eadf;color:#796341;font-size:10px;font-weight:700}.pill.ok{background:#eaf1eb;color:var(--green)}.pill.no{background:#f7eae7;color:var(--red)}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.field label{display:block;font-size:11px;color:#766e63;margin-bottom:7px}.field input,.field select{width:100%;padding:12px;border:1px solid var(--line);border-radius:6px;background:#fffdf9;color:var(--ink);outline:none}.field input:focus,.field select:focus{border-color:var(--gold)}.full{grid-column:1/-1}.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:8px;font-size:13px}.hidden{display:none!important}.modal-back{position:fixed;inset:0;background:#201b16a6;z-index:20;display:grid;place-items:center;padding:18px}.modal{width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--paper);border-radius:12px;padding:26px;box-shadow:0 25px 80px #0003}.modal h2{font:500 28px "Playfair Display",serif;margin:0 0 20px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.notice{font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px}.invite-page{min-height:100vh;background:#f2ece2;padding:26px 14px;display:grid;place-items:center}.invite-card{width:min(760px,100%);background:#fffdf9;border:1px solid #dfd2bd;padding:clamp(28px,7vw,68px);text-align:center;position:relative;box-shadow:0 20px 80px #4a382014}.invite-card:before{content:"";position:absolute;inset:12px;border:1px solid #e8dcc9;pointer-events:none}.invite-kicker{letter-spacing:3px;text-transform:uppercase;font-size:10px;color:var(--gold)}.invite-title{font:400 clamp(36px,7vw,62px) "Playfair Display",serif;line-height:1.1;margin:24px 0 12px}.amp{font:italic 30px "Playfair Display",serif;color:var(--gold)}.invite-copy{max-width:510px;margin:22px auto;color:#71685d;line-height:1.9;font-size:14px}.invite-rule{width:70px;height:1px;background:var(--gold2);margin:24px auto}.invite-details{display:flex;justify-content:center;gap:30px;flex-wrap:wrap;margin:28px 0}.detail strong{display:block;font:500 20px "Playfair Display",serif;margin-bottom:4px}.detail span{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#968a7a}.guest-box{margin:26px auto 0;padding:18px;border:1px solid var(--line);max-width:420px}.guest-box strong{font:500 22px "Playfair Display",serif}.qr{display:flex;justify-content:center;margin:15px auto}.lang{font-size:12px;border:1px solid var(--line);background:white;padding:8px 10px;border-radius:6px}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#29251f;color:white;padding:12px 18px;border-radius:8px;font-size:12px;z-index:50}.small{font-size:11px;color:var(--muted)}.check-row{display:flex;align-items:center;gap:8px}.check-row input{width:auto}.footer{font-size:10px;color:#a39a8d;text-align:center;margin:30px 0 10px}.photo-preview{width:100%;max-width:260px;max-height:220px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;margin-top:10px}.editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.field textarea{width:100%;min-height:105px;padding:12px;border:1px solid var(--line);border-radius:6px;background:#fffdf9;color:var(--ink);font:inherit;resize:vertical}.field textarea:focus{outline:1px solid var(--gold)}.section-note{font-size:12px;color:var(--muted);line-height:1.6}.invite-photo{width:min(100%,520px);max-height:360px;object-fit:cover;margin:20px auto 4px;border-radius:3px}.invite-extra{margin:25px auto;max-width:540px;text-align:left;padding:18px;border-top:1px solid var(--line)}.invite-extra h3{font:500 21px "Playfair Display",serif;margin:0 0 10px}.invite-extra p{font-size:13px;line-height:1.8;color:#71685d;white-space:pre-line}.invite-extra a{color:var(--gold);font-weight:700}.music-player{margin:20px auto;max-width:420px}.music-player audio{width:100%}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:"DM Sans",sans-serif}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.serif{font-family:"Playfair Display",serif}
+.app{min-height:100vh}
+.topbar{height:76px;padding:0 clamp(18px,5vw,64px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:#fffdf9eF;position:sticky;top:0;z-index:5;backdrop-filter:blur(12px)}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:38px;height:38px;border:1px solid var(--gold2);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-family:Georgia;font-size:21px}
+.brand-name{font-family:"Playfair Display",serif;font-size:22px;letter-spacing:3px}
+.brand-sub{font-size:9px;color:var(--muted);letter-spacing:1.8px;text-transform:uppercase}
+.top-actions{display:flex;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:white;color:var(--ink);padding:10px 15px;border-radius:7px;font-weight:600;font-size:13px;transition:all .15s}
+.btn:hover{border-color:var(--gold)}
+.btn.primary{background:var(--ink);color:white;border-color:var(--ink)}
+.btn.gold{background:var(--gold);color:white;border-color:var(--gold)}
+.btn.danger{background:#fff5f4;color:var(--red);border-color:#e6c4bf}
+.btn.danger:hover{background:var(--red);color:white;border-color:var(--red)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:7px 11px;font-size:12px}
+.layout{display:grid;grid-template-columns:245px 1fr;max-width:1440px;margin:auto;min-height:calc(100vh - 76px)}
+.sidebar{padding:26px 16px;border-right:1px solid var(--line);background:#fbf8f2}
+.side-label{font-size:10px;letter-spacing:1.6px;color:#a59b8e;text-transform:uppercase;padding:0 12px;margin:14px 0 8px}
+.nav{display:flex;align-items:center;gap:11px;width:100%;border:0;background:transparent;padding:11px 12px;border-radius:7px;color:#6f685e;text-align:left;margin:2px 0;font-size:13px}
+.nav.active,.nav:hover{background:#efe7da;color:var(--ink);font-weight:600}
+.nav .ico{width:20px;text-align:center;color:var(--gold)}
+.active-wedding-badge{margin:0 8px 14px;padding:10px 12px;background:#f3ece0;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.active-wedding-badge strong{display:block;font-family:"Playfair Display",serif;font-size:15px;color:var(--ink);margin-top:2px}
+.main{padding:clamp(22px,4vw,50px);min-width:0}
+.eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700}
+.page-title{font:500 clamp(28px,4vw,40px) "Playfair Display",serif;margin:8px 0}
+.sub{color:var(--muted);font-size:14px;line-height:1.7}
+.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:26px;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:24px 0}
+.stat,.panel,.wedding-card{background:var(--paper);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.stat{padding:18px}
+.stat-label{font-size:12px;color:var(--muted)}
+.stat-num{font:500 30px "Playfair Display",serif;margin-top:6px}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.panel{padding:22px;margin:18px 0}
+.panel h3{font:500 21px "Playfair Display",serif;margin:0 0 6px}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.wedding-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.wedding-card{overflow:hidden;position:relative}
+.wedding-card.selected{border-color:var(--gold);box-shadow:0 14px 40px #a9864d1f}
+.card-cover{height:115px;background:linear-gradient(120deg,#e9dfce,#f8f2e8 60%,#d9c7a8);display:flex;align-items:center;justify-content:center;color:#a9864d;font:italic 26px "Playfair Display",serif;background-size:cover;background-position:center}
+.wedding-body{padding:18px}
+.wedding-body h3{font:500 23px "Playfair Display",serif;margin:0 0 6px}
+.meta{font-size:12px;color:var(--muted);margin:5px 0 14px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.table-wrap{overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;color:#8d8377;font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:12px 10px;border-bottom:1px solid var(--line)}
+td{padding:13px 10px;border-bottom:1px solid #f0ebe3}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block;padding:5px 9px;border-radius:30px;background:#f1eadf;color:#796341;font-size:10px;font-weight:700}
+.pill.ok{background:#eaf1eb;color:var(--green)}
+.pill.no{background:#f7eae7;color:var(--red)}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.field label{display:block;font-size:11px;color:#766e63;margin-bottom:7px;font-weight:600}
+.field input,.field select,.field textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:6px;background:#fffdf9;color:var(--ink);outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold)}
+.field textarea{min-height:95px;resize:vertical}
+.full{grid-column:1/-1}
+.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:8px;font-size:13px}
+.hidden{display:none!important}
+.modal-back{position:fixed;inset:0;background:#201b16a6;z-index:20;display:grid;place-items:center;padding:18px}
+.modal{width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--paper);border-radius:12px;padding:26px;box-shadow:0 25px 80px #0003}
+.modal h2{font:500 26px "Playfair Display",serif;margin:0 0 18px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;flex-wrap:wrap}
+.notice{font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px}
+.invite-page{min-height:100vh;background:#f2ece2;padding:26px 14px;display:grid;place-items:center}
+.invite-card{width:min(760px,100%);background:#fffdf9;border:1px solid #dfd2bd;padding:clamp(28px,7vw,64px);text-align:center;position:relative;box-shadow:0 20px 80px #4a382014}
+.invite-card:before{content:"";position:absolute;inset:12px;border:1px solid #e8dcc9;pointer-events:none}
+.invite-kicker{letter-spacing:3px;text-transform:uppercase;font-size:10px;color:var(--gold)}
+.invite-title{font:400 clamp(34px,7vw,60px) "Playfair Display",serif;line-height:1.1;margin:22px 0 12px}
+.amp{font:italic 30px "Playfair Display",serif;color:var(--gold)}
+.invite-copy{max-width:520px;margin:20px auto;color:#71685d;line-height:1.9;font-size:14px}
+.invite-rule{width:70px;height:1px;background:var(--gold2);margin:24px auto}
+.invite-details{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;margin:26px 0}
+.detail strong{display:block;font:500 20px "Playfair Display",serif;margin-bottom:4px}
+.detail span{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#968a7a}
+.guest-box{margin:26px auto 0;padding:20px;border:1px solid var(--line);max-width:440px;background:#fbf8f2}
+.guest-box strong{font:500 22px "Playfair Display",serif}
+.qr{display:flex;justify-content:center;margin:15px auto}
+.lang{font-size:12px;border:1px solid var(--line);background:white;padding:8px 10px;border-radius:6px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#29251f;color:white;padding:12px 18px;border-radius:8px;font-size:12px;z-index:50;box-shadow:0 8px 25px #0004}
+.small{font-size:11px;color:var(--muted)}
+.check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+.check-item{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);border-radius:7px;background:#fffdf9;font-size:13px;cursor:pointer}
+.check-item input{width:16px;height:16px;accent-color:var(--gold)}
+.footer{font-size:10px;color:#a39a8d;text-align:center;margin:30px 0 10px}
+.photo-preview{width:100%;max-width:260px;max-height:220px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;margin-top:10px}
+.editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.section-note{font-size:12px;color:var(--muted);line-height:1.6}
+.invite-photo{width:min(100%,520px);max-height:360px;object-fit:cover;margin:20px auto 4px;border-radius:4px}
+.invite-extra{margin:24px auto;max-width:540px;text-align:left;padding:18px;border-top:1px solid var(--line)}
+.invite-extra h3{font:500 21px "Playfair Display",serif;margin:0 0 8px}
+.invite-extra p{font-size:13px;line-height:1.8;color:#71685d;white-space:pre-line;margin:0 0 14px}
+.invite-extra a{color:var(--gold);font-weight:700;text-decoration:none}
+.music-player{margin:20px auto;max-width:420px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fbf8f2}
+.music-player audio{width:100%;margin-top:6px}
+.floor-plan{background:#f5efe4;border:1px solid var(--line);border-radius:12px;padding:22px;position:relative}
+.floor-stage{text-align:center;padding:10px 18px;border:1px solid var(--gold2);background:#fffdf9;border-radius:30px;max-width:280px;margin:0 auto 24px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700}
+.floor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px}
+.floor-table{background:#fffdf9;border:2px solid var(--gold2);border-radius:14px;padding:16px;text-align:center;box-shadow:0 8px 20px #4a38200a}
+.floor-table.full-cap{border-color:var(--green)}
+.floor-circle{width:76px;height:76px;border-radius:50%;border:1px dashed var(--gold);margin:0 auto 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fbf7ef}
+.bar-bg{height:8px;background:#ece4d7;border-radius:99px;overflow:hidden;margin:8px 0}
+.bar-fill{height:100%;background:var(--gold);border-radius:99px}
+.guestbook-item{padding:14px;border:1px solid var(--line);border-radius:8px;background:#fffdf9;margin-bottom:10px;text-align:left}
+.sync-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px}
+.sync-dot.online{background:var(--green)}
+code.sql{display:block;background:#24201b;color:#f4ede2;padding:12px;border-radius:8px;font-size:11px;overflow:auto;white-space:pre;line-height:1.5;margin-top:8px}
 
-@media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{display:flex;overflow:auto;padding:8px 12px;border-right:0;border-bottom:1px solid var(--line);gap:4px}.side-label{display:none}.nav{white-space:nowrap;width:auto;padding:10px}.nav .ico{width:auto}.main{padding:22px 16px}.cards{grid-template-columns:1fr 1fr}.wedding-grid{grid-template-columns:1fr}.head-row{align-items:flex-start;flex-direction:column}.topbar{height:66px}.brand-name{font-size:19px}}@media(max-width:480px){.cards{grid-template-columns:1fr 1fr;gap:9px}.stat{padding:14px}.stat-num{font-size:26px}.form-grid{grid-template-columns:1fr}.full{grid-column:auto}.top-actions .btn{padding:9px 10px}.brand-sub{display:none}.invite-details{gap:18px}}
+@media(max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{display:flex;overflow:auto;padding:8px 12px;border-right:0;border-bottom:1px solid var(--line);gap:4px}
+  .side-label,.active-wedding-badge{display:none}
+  .nav{white-space:nowrap;width:auto;padding:9px 11px}
+  .nav .ico{width:auto}
+  .main{padding:20px 15px}
+  .cards{grid-template-columns:1fr 1fr}
+  .wedding-grid,.editor-grid{grid-template-columns:1fr}
+  .head-row{align-items:flex-start;flex-direction:column}
+  .topbar{height:66px}
+  .brand-name{font-size:19px}
+}
+@media(max-width:500px){
+  .cards{grid-template-columns:1fr 1fr;gap:9px}
+  .stat{padding:14px}
+  .stat-num{font-size:25px}
+  .form-grid,.check-grid{grid-template-columns:1fr}
+  .full{grid-column:auto}
+  .top-actions .btn{padding:8px 10px}
+  .brand-sub{display:none}
+  .invite-details{gap:16px}
+}
 </style>
 </head>
 <body>
 <div id="app" class="app"></div>
 <div id="modal-root"></div>
 <div id="toast-root"></div>
+
 <script>
-const $=s=>document.querySelector(s);
-const storeKey='nuptia_demo_v1';
-const translations={
-fr:{overview:'Vue d’ensemble',weddings:'Mariages',guests:'Invités',seating:'Placement',checkin:'Accueil & QR',settings:'Paramètres',welcome:'Votre espace de gestion',hello:'Organisez chaque union avec élégance.',newWedding:'Créer un mariage',active:'Mariages créés',guestsCount:'Invités enregistrés',checked:'Invités accueillis',yourWeddings:'Vos espaces de mariage',open:'Gérer',view:'Voir invitation',datePending:'Date à définir',adminNote:'Prototype de démonstration : les données sont enregistrées sur cet appareil uniquement.',createTitle:'Créer un espace de mariage',couple:'Noms du couple',date:'Date du mariage',venue:'Lieu principal',save:'Enregistrer',cancel:'Annuler',guestTitle:'Liste des invités',addGuest:'Ajouter un invité',guestName:'Nom de l’invité',email:'Téléphone (facultatif)',seats:'Places autorisées',table:'Table attribuée',status:'Statut',invite:'Invitation',pending:'En attente',confirmed:'Confirmé',declined:'Décliné',notAssigned:'Non attribuée',assign:'Attribuer',search:'Rechercher un invité…',seatingTitle:'Plan de placement',tableName:'Nom / numéro de table',capacity:'Capacité',addTable:'Ajouter une table',tableGuests:'Invités placés',checkTitle:'Contrôle des entrées',checkHint:'Recherchez un invité pour valider son arrivée.',mark:'Valider l’entrée',arrived:'Arrivé',notArrived:'Pas encore arrivé',public:'Invitation publique',back:'Retour au tableau de bord',rsvp:'Confirmer ma présence',map:'Obtenir l’itinéraire',welcomeText:'C’est avec une immense joie que nous vous invitons à partager avec nous ce moment précieux de notre histoire.',invited:'Vous êtes cordialement invités',places:'Places réservées',yourTable:'Votre table',scan:'Code d’invitation',notFound:'Invitation introuvable',language:'Langue',dateLabel:'Date',placeLabel:'Lieu',noGuests:'Aucun invité pour le moment.',noTables:'Aucune table créée.',copy:'Copier le lien',share:'Partager WhatsApp',delete:'Supprimer',edit:'Modifier',saveChanges:'Enregistrer les changements',rsvpDone:'Merci pour votre réponse !',demo:'Données de démonstration'}
-,en:{overview:'Overview',weddings:'Weddings',guests:'Guests',seating:'Seating',checkin:'Check-in & QR',settings:'Settings',welcome:'Your management space',hello:'Organize every union with elegance.',newWedding:'Create a wedding',active:'Weddings created',guestsCount:'Registered guests',checked:'Guests checked in',yourWeddings:'Your wedding spaces',open:'Manage',view:'View invitation',datePending:'Date to be confirmed',adminNote:'Demo prototype: data is stored on this device only.',createTitle:'Create a wedding space',couple:'Couple’s names',date:'Wedding date',venue:'Main venue',save:'Save',cancel:'Cancel',guestTitle:'Guest list',addGuest:'Add a guest',guestName:'Guest name',email:'Phone (optional)',seats:'Allowed seats',table:'Assigned table',status:'Status',invite:'Invitation',pending:'Pending',confirmed:'Confirmed',declined:'Declined',notAssigned:'Not assigned',assign:'Assign',search:'Search for a guest…',seatingTitle:'Seating plan',tableName:'Table name / number',capacity:'Capacity',addTable:'Add a table',tableGuests:'Guests seated',checkTitle:'Guest check-in',checkHint:'Search for a guest to confirm arrival.',mark:'Check in',arrived:'Arrived',notArrived:'Not checked in',public:'Public invitation',back:'Back to dashboard',rsvp:'Confirm attendance',map:'Get directions',welcomeText:'We are delighted to invite you to share this precious moment in our story.',invited:'You are warmly invited',places:'Reserved seats',yourTable:'Your table',scan:'Invitation code',notFound:'Invitation not found',language:'Language',dateLabel:'Date',placeLabel:'Venue',noGuests:'No guests yet.',noTables:'No tables created.',copy:'Copy link',share:'Share on WhatsApp',delete:'Delete',edit:'Edit',saveChanges:'Save changes',rsvpDone:'Thank you for your response!',demo:'Demo data'}
+const $ = s => document.querySelector(s);
+const storeKey = 'nuptia_v3_store';
+const cloudCfgKey = 'nuptia_supabase_cfg';
+
+const DRESS_OPTIONS = {
+  fr: [
+    { id: 'evening', label: 'Tenue de soirée élégante' },
+    { id: 'suit', label: 'Costume & cravate / nœud papillon' },
+    { id: 'traditional', label: 'Tenue traditionnelle / pagne chic' },
+    { id: 'smart_casual', label: 'Chic décontracté' },
+    { id: 'white_gold', label: 'Thème Blanc & Doré' },
+    { id: 'no_white', label: 'Éviter le blanc (réservé à la mariée)' }
+  ],
+  en: [
+    { id: 'evening', label: 'Elegant evening attire' },
+    { id: 'suit', label: 'Suit & tie / bow tie' },
+    { id: 'traditional', label: 'Traditional / cultural attire' },
+    { id: 'smart_casual', label: 'Smart casual' },
+    { id: 'white_gold', label: 'White & Gold theme' },
+    { id: 'no_white', label: 'Avoid white (reserved for the bride)' }
+  ]
 };
-function initial(){return {lang:'fr',selected:null,weddings:[{id:'theuriet-omie-2027',couple:'Theuriet & Naomi',date:'',venue:'Lubumbashi, RDC',message:'C’est avec une immense joie et une profonde gratitude envers Dieu que nous avons le plaisir de vous annoncer notre union. Nous serions honorés de vous compter parmi ceux qui partageront avec nous ce moment précieux de notre histoire.',tables:[{id:'t1',name:'Table 01',capacity:8},{id:'t2',name:'Table 02',capacity:8},{id:'t3',name:'Table 03',capacity:10}],guests:[{id:'g1',name:'Jean & Marie',phone:'',seats:2,tableId:'t1',status:'confirmed',token:'NUP-2027-0085',arrived:false},{id:'g2',name:'Famille Kasongo',phone:'',seats:4,tableId:'t2',status:'pending',token:'NUP-2027-0086',arrived:false}]}]}}
-let db;try{db=JSON.parse(localStorage.getItem(storeKey))||initial()}catch(e){db=initial()}
-// Migration douce : ajoute les nouveaux champs sans effacer les données déjà enregistrées.
-(db.weddings||[]).forEach(w=>{w.story=w.story||'';w.photo=w.photo||'';w.ceremony=w.ceremony||'';w.reception=w.reception||w.venue||'';w.mapUrl=w.mapUrl||'';w.musicUrl=w.musicUrl||'';w.dressCode=w.dressCode||'';w.program=w.program||'';w.websiteNote=w.websiteNote||'';w.message=w.message||translations[db.lang||'fr'].welcomeText;w.guests=w.guests||[];w.tables=w.tables||[];});
-const t=k=>translations[db.lang][k]||k;
-function persist(){localStorage.setItem(storeKey,JSON.stringify(db))}
-function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function wedding(){return db.weddings.find(w=>w.id===db.selected)||db.weddings[0]}
-function allGuests(){return db.weddings.reduce((a,w)=>a.concat(w.guests),[])}
-function showToast(msg){$('#toast-root').innerHTML=`<div class="toast">${esc(msg)}</div>`;setTimeout(()=>$('#toast-root').innerHTML='',2400)}
-function go(page){history.pushState({page},'',`#${page}`);render(page)}
-function header(){return `<header class="topbar"><div class="brand"><div class="brand-mark">N</div><div><div class="brand-name">NUPTIA</div><div class="brand-sub">Wedding experiences</div></div></div><div class="top-actions"><select class="lang" onchange="setLang(this.value)"><option value="fr" ${db.lang==='fr'?'selected':''}>FR</option><option value="en" ${db.lang==='en'?'selected':''}>EN</option></select><button class="btn ghost" onclick="showToast('${t('demo')}')">✧ NUPTIA</button></div></header>`}
-function shell(page,content){$('#app').innerHTML=header()+`<div class="layout"><aside class="sidebar"><div class="side-label">Workspace</div>${[['overview','⌂'],['weddings','♡'],['settings','✧'],['guests','♧'],['seating','▦'],['checkin','✓']].map(([k,i])=>`<button class="nav ${page===k?'active':''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}</aside><main class="main">${content}<div class="footer">NUPTIA · ${t('adminNote')}</div></main></div>`}
-function render(page='overview'){
- const params=new URLSearchParams(location.search);if(params.has('wedding')){renderInvite(params.get('wedding'),params.get('invite'));return}
- if(!['overview','weddings','settings','guests','seating','checkin'].includes(page))page='overview';
- if(page==='overview')return dashboard();
- if(page==='weddings')return weddingsPage();
- if(page==='settings')return settingsPage();
- if(page==='guests')return guestsPage();
- if(page==='seating')return seatingPage();
- if(page==='checkin')return checkinPage();
+
+const translations = {
+  fr: {
+    overview: 'Vue d’ensemble',
+    weddings: 'Mariages',
+    settings: 'Personnalisation',
+    guests: 'Invités',
+    seating: 'Plan de salle',
+    checkin: 'Accueil & QR',
+    stats: 'Statistiques',
+    guestbook: 'Livre d’or',
+    sync: 'Sync & Sécurité',
+    welcome: 'Votre espace de gestion',
+    hello: 'Organisez chaque union avec élégance, sur un ou plusieurs téléphones.',
+    newWedding: 'Créer un mariage',
+    active: 'Mariages créés',
+    guestsCount: 'Invités enregistrés',
+    seatsTotal: 'Places prévues',
+    checked: 'Invités accueillis',
+    yourWeddings: 'Vos espaces de mariage',
+    open: 'Gérer',
+    view: 'Voir invitation',
+    datePending: 'Date à définir',
+    adminNote: 'NUPTIA V3 · Sauvegarde locale active + synchronisation Supabase disponible.',
+    createTitle: 'Créer un espace de mariage',
+    couple: 'Noms du couple',
+    date: 'Date du mariage',
+    venue: 'Lieu principal',
+    save: 'Enregistrer',
+    cancel: 'Annuler',
+    guestTitle: 'Liste des invités',
+    addGuest: 'Ajouter un invité',
+    guestName: 'Nom de l’invité',
+    email: 'Téléphone (facultatif)',
+    seats: 'Places autorisées',
+    table: 'Table attribuée',
+    status: 'Statut',
+    invite: 'Invitation',
+    pending: 'En attente',
+    confirmed: 'Confirmé',
+    declined: 'Décliné',
+    notAssigned: 'Non attribuée',
+    search: 'Rechercher un invité…',
+    seatingTitle: 'Plan visuel de la salle',
+    tableName: 'Nom / numéro de table',
+    capacity: 'Capacité',
+    addTable: 'Ajouter une table',
+    tableGuests: 'Invités placés',
+    checkTitle: 'Contrôle des entrées',
+    checkHint: 'Recherchez un invité ou scannez son code pour valider son arrivée.',
+    mark: 'Valider l’entrée',
+    arrived: 'Arrivé',
+    public: 'Invitation publique',
+    back: 'Retour au tableau de bord',
+    rsvp: 'Confirmer ma présence',
+    declineRsvp: 'Je ne pourrai pas venir',
+    map: 'Voir l’itinéraire sur Google Maps ↗',
+    welcomeText: 'C’est avec une immense joie que nous vous invitons à partager avec nous ce moment précieux de notre histoire.',
+    invited: 'Vous êtes cordialement invités',
+    places: 'Places réservées',
+    yourTable: 'Votre table',
+    scan: 'Code d’invitation',
+    notFound: 'Invitation introuvable',
+    dateLabel: 'Date',
+    placeLabel: 'Lieu',
+    noGuests: 'Aucun invité pour le moment.',
+    noTables: 'Aucune table créée.',
+    copy: 'Copier le lien',
+    share: 'Partager WhatsApp',
+    delete: 'Supprimer',
+    deleteWeddingTitle: 'Supprimer cet espace de mariage ?',
+    deleteWeddingWarn: 'Cette action supprimera définitivement ce mariage, ses invités, ses tables et ses messages de félicitations.',
+    rsvpDone: 'Merci ! Votre présence est confirmée.',
+    rsvpDeclinedDone: 'Votre réponse a bien été enregistrée.',
+    countdownLabel: 'Compte à rebours',
+    days: 'jours',
+    hours: 'h',
+    mins: 'min',
+    guestbookTitle: 'Livre de félicitations',
+    leaveWish: 'Laisser un mot aux mariés',
+    yourName: 'Votre nom',
+    yourWish: 'Votre message de félicitations…',
+    sendWish: 'Publier le message',
+    wishSent: 'Merci pour vos félicitations !',
+    noWishes: 'Aucun message de félicitations pour le moment.',
+    exportCsv: 'Exporter la liste (CSV)'
+  },
+  en: {
+    overview: 'Overview',
+    weddings: 'Weddings',
+    settings: 'Customize',
+    guests: 'Guests',
+    seating: 'Floor Plan',
+    checkin: 'Check-in & QR',
+    stats: 'Statistics',
+    guestbook: 'Guestbook',
+    sync: 'Sync & Security',
+    welcome: 'Your management space',
+    hello: 'Organize every union with elegance across one or multiple phones.',
+    newWedding: 'Create a wedding',
+    active: 'Weddings created',
+    guestsCount: 'Registered guests',
+    seatsTotal: 'Reserved seats',
+    checked: 'Guests checked in',
+    yourWeddings: 'Your wedding spaces',
+    open: 'Manage',
+    view: 'View invitation',
+    datePending: 'Date to be confirmed',
+    adminNote: 'NUPTIA V3 · Local backup active + Supabase cloud sync available.',
+    createTitle: 'Create a wedding space',
+    couple: 'Couple’s names',
+    date: 'Wedding date',
+    venue: 'Main venue',
+    save: 'Save',
+    cancel: 'Cancel',
+    guestTitle: 'Guest list',
+    addGuest: 'Add a guest',
+    guestName: 'Guest name',
+    email: 'Phone (optional)',
+    seats: 'Allowed seats',
+    table: 'Assigned table',
+    status: 'Status',
+    invite: 'Invitation',
+    pending: 'Pending',
+    confirmed: 'Confirmed',
+    declined: 'Declined',
+    notAssigned: 'Not assigned',
+    search: 'Search for a guest…',
+    seatingTitle: 'Visual Floor Plan',
+    tableName: 'Table name / number',
+    capacity: 'Capacity',
+    addTable: 'Add a table',
+    tableGuests: 'Guests seated',
+    checkTitle: 'Guest check-in',
+    checkHint: 'Search for a guest or code to confirm arrival.',
+    mark: 'Check in',
+    arrived: 'Arrived',
+    public: 'Public invitation',
+    back: 'Back to dashboard',
+    rsvp: 'Confirm attendance',
+    declineRsvp: 'Unable to attend',
+    map: 'Get directions on Google Maps ↗',
+    welcomeText: 'We are delighted to invite you to share this precious moment in our story.',
+    invited: 'You are warmly invited',
+    places: 'Reserved seats',
+    yourTable: 'Your table',
+    scan: 'Invitation code',
+    notFound: 'Invitation not found',
+    dateLabel: 'Date',
+    placeLabel: 'Venue',
+    noGuests: 'No guests yet.',
+    noTables: 'No tables created.',
+    copy: 'Copy link',
+    share: 'Share on WhatsApp',
+    delete: 'Delete',
+    deleteWeddingTitle: 'Delete this wedding space?',
+    deleteWeddingWarn: 'This will permanently remove this wedding, its guests, tables, and guestbook wishes.',
+    rsvpDone: 'Thank you! Your attendance is confirmed.',
+    rsvpDeclinedDone: 'Your response has been recorded.',
+    countdownLabel: 'Countdown',
+    days: 'days',
+    hours: 'h',
+    mins: 'min',
+    guestbookTitle: 'Guestbook & Wishes',
+    leaveWish: 'Leave a note for the couple',
+    yourName: 'Your name',
+    yourWish: 'Your congratulatory message…',
+    sendWish: 'Post message',
+    wishSent: 'Thank you for your wishes!',
+    noWishes: 'No guestbook messages yet.',
+    exportCsv: 'Export list (CSV)'
+  }
+};
+
+function initial() {
+  return {
+    lang: 'fr',
+    selected: 'theuriet-omie-2027',
+    weddings: [
+      {
+        id: 'theuriet-omie-2027',
+        couple: 'Theuriet & Naomi',
+        date: '',
+        venue: 'Lubumbashi, RDC',
+        story: '',
+        photo: '',
+        ceremony: '',
+        reception: 'Lubumbashi, RDC',
+        mapUrl: '',
+        gpsLat: '',
+        gpsLng: '',
+        musicUrl: '',
+        musicData: '',
+        musicName: '',
+        dressCodes: ['evening'],
+        dressCode: '',
+        program: '',
+        websiteNote: '',
+        message: 'C’est avec une immense joie et une profonde gratitude envers Dieu que nous avons le plaisir de vous annoncer notre union. Nous serions honorés de vous compter parmi ceux qui partageront avec nous ce moment précieux de notre histoire.',
+        tables: [
+          { id: 't1', name: 'Table 01 — Honneur', capacity: 8 },
+          { id: 't2', name: 'Table 02 — Famille', capacity: 8 },
+          { id: 't3', name: 'Table 03 — Amis', capacity: 10 }
+        ],
+        guests: [
+          { id: 'g1', name: 'Jean & Marie', phone: '+243', seats: 2, tableId: 't1', status: 'confirmed', token: 'NUP-2027-0085', arrived: false },
+          { id: 'g2', name: 'Famille Kasongo', phone: '+243', seats: 4, tableId: 't2', status: 'pending', token: 'NUP-2027-0086', arrived: false }
+        ],
+        wishes: [
+          { id: 'w1', author: 'Jean & Marie', text: 'Tous nos vœux de bonheur et de bénédictions pour votre belle union !', createdAt: new Date().toISOString() }
+        ]
+      }
+    ]
+  };
 }
-function dashboard(){let gs=allGuests();shell('overview',`<div class="head-row"><div><div class="eyebrow">NUPTIA / DASHBOARD</div><h1 class="page-title">${t('welcome')}</h1><div class="sub">${t('hello')}</div></div><button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button></div><div class="cards"><div class="stat"><div class="stat-label">${t('active')}</div><div class="stat-num">${db.weddings.length}</div></div><div class="stat"><div class="stat-label">${t('guestsCount')}</div><div class="stat-num">${gs.length}</div></div><div class="stat"><div class="stat-label">${t('checked')}</div><div class="stat-num">${gs.filter(g=>g.arrived).length}</div></div></div><section class="panel"><div class="panel-head"><div><h3>${t('yourWeddings')}</h3><div class="small">Des espaces indépendants pour chaque couple</div></div><button class="btn" onclick="go('weddings')">${t('weddings')} →</button></div>${weddingCards()}</section>`)}
-function weddingCards(){return `<div class="wedding-grid">${db.weddings.map(w=>`<article class="wedding-card"><div class="card-cover">A day to remember</div><div class="wedding-body"><h3>${esc(w.couple)}</h3><div class="meta">${w.date?esc(w.date):t('datePending')} · ${esc(w.venue||'')}</div><div class="actions"><button class="btn primary" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button><button class="btn" onclick="selectWedding('${w.id}');go('guests')">${t('open')}</button><button class="btn" onclick="publicLink('${w.id}')">${t('view')}</button></div></div></article>`).join('')}</div>`}
-function weddingsPage(){shell('weddings',`<div class="head-row"><div><div class="eyebrow">NUPTIA / WORKSPACES</div><h1 class="page-title">${t('weddings')}</h1><div class="sub">Crée et administre un espace distinct pour chaque couple.</div></div><button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button></div>${weddingCards()}`)}
-function selectWedding(id){db.selected=id;persist()}
-function settingsPage(){let w=wedding();if(!w)return; shell('settings',`<div class="head-row"><div><div class="eyebrow">NUPTIA / PERSONNALISATION</div><h1 class="page-title">${esc(w.couple)}</h1><div class="sub">Configurez l’invitation de ce mariage depuis votre téléphone.</div></div><button class="btn" onclick="publicLink('${w.id}')">Voir l’invitation ↗</button></div>
-<section class="panel"><div class="panel-head"><div><h3>1. Les mariés et leur histoire</h3><div class="section-note">Ajoutez une belle photo et présentez votre histoire.</div></div></div><div class="editor-grid"><div class="field"><label>Noms du couple</label><input id="ed-couple" value="${esc(w.couple)}"></div><div class="field"><label>Date du mariage</label><input id="ed-date" type="date" value="${esc(w.date||'')}"></div><div class="field full"><label>Photo des mariés (depuis le téléphone)</label><input id="ed-photo" type="file" accept="image/*" onchange="previewWeddingPhoto(this)"><img id="photo-preview" class="photo-preview ${w.photo?'':'hidden'}" src="${w.photo||''}" alt="Aperçu de la photo des mariés">${w.photo?`<button class="btn" type="button" onclick="removeWeddingPhoto()" style="margin-top:8px">Retirer la photo</button>`:''}<div class="notice">Conseil : choisissez une photo nette. Elle sera optimisée pour limiter l’espace utilisé dans ce prototype.</div></div><div class="field full"><label>Histoire ou présentation du couple</label><textarea id="ed-story" placeholder="Racontez brièvement votre histoire…">${esc(w.story||'')}</textarea></div><div class="field full"><label>Message d’invitation</label><textarea id="ed-message">${esc(w.message||'')}</textarea></div></div></section>
-<section class="panel"><div class="panel-head"><div><h3>2. Lieux et localisation</h3><div class="section-note">Indiquez les lieux et collez les liens Google Maps correspondants.</div></div></div><div class="editor-grid"><div class="field"><label>Lieu de la cérémonie</label><input id="ed-ceremony" value="${esc(w.ceremony||'')}" placeholder="Église / salle et adresse"></div><div class="field"><label>Lieu de la réception</label><input id="ed-reception" value="${esc(w.reception||w.venue||'')}" placeholder="Salle de réception et adresse"></div><div class="field full"><label>Lien Google Maps</label><input id="ed-map" type="url" value="${esc(w.mapUrl||'')}" placeholder="https://maps.google.com/…"></div></div></section>
-<section class="panel"><div class="panel-head"><div><h3>3. Ambiance et programme</h3><div class="section-note">Ajoutez la musique, le dress code et les étapes de la journée.</div></div></div><div class="editor-grid"><div class="field full"><label>Lien direct vers la musique (MP3 ou fichier audio accessible)</label><input id="ed-music" type="url" value="${esc(w.musicUrl||'')}" placeholder="https://…/musique.mp3"><div class="notice">Utilisez un lien direct vers un fichier audio. Les liens de pages YouTube ou Spotify ne sont pas des liens audio directs.</div></div><div class="field"><label>Dress code</label><input id="ed-dress" value="${esc(w.dressCode||'')}" placeholder="Ex. Tenue de soirée, beige et doré"></div><div class="field"><label>Note complémentaire</label><input id="ed-note" value="${esc(w.websiteNote||'')}" placeholder="Ex. Merci d’arriver 30 minutes avant"></div><div class="field full"><label>Programme de la journée</label><textarea id="ed-program" placeholder="10h00 – Cérémonie\n14h00 – Réception\n18h00 – Soirée">${esc(w.program||'')}</textarea></div></div></section>
-<div class="actions"><button class="btn primary" onclick="saveWeddingDetails()">Enregistrer les modifications</button><button class="btn" onclick="publicLink('${w.id}')">Prévisualiser l’invitation</button></div><p class="notice">Les modifications sont enregistrées dans le navigateur de cet appareil. La synchronisation en ligne entre organisateurs et appareils sera ajoutée dans une prochaine étape.</p>`)}
-let pendingWeddingPhoto='';
-function previewWeddingPhoto(input){let file=input.files&&input.files[0];if(!file)return;if(!file.type.startsWith('image/')){showToast('Choisissez un fichier image');return}if(file.size>12*1024*1024){showToast('Image trop volumineuse : choisissez une image de moins de 12 Mo');input.value='';return}let reader=new FileReader();reader.onload=()=>{let img=new Image();img.onload=()=>{let max=1100,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);pendingWeddingPhoto=canvas.toDataURL('image/jpeg',0.78);let preview=$('#photo-preview');preview.src=pendingWeddingPhoto;preview.classList.remove('hidden')};img.src=reader.result};reader.readAsDataURL(file)}
-function removeWeddingPhoto(){pendingWeddingPhoto='';wedding().photo='';persist();render('settings')}
-function saveWeddingDetails(){let w=wedding();w.couple=$('#ed-couple').value.trim()||w.couple;w.date=$('#ed-date').value;w.story=$('#ed-story').value.trim();w.message=$('#ed-message').value.trim();w.ceremony=$('#ed-ceremony').value.trim();w.reception=$('#ed-reception').value.trim();w.venue=w.reception||w.ceremony||w.venue;w.mapUrl=$('#ed-map').value.trim();w.musicUrl=$('#ed-music').value.trim();w.dressCode=$('#ed-dress').value.trim();w.websiteNote=$('#ed-note').value.trim();w.program=$('#ed-program').value.trim();if(pendingWeddingPhoto)w.photo=pendingWeddingPhoto;pendingWeddingPhoto='';try{persist();showToast('Modifications enregistrées');render('settings')}catch(e){showToast('Stockage saturé : réduisez la taille de la photo');}}
-function guestsPage(){let w=wedding();shell('guests',`<div class="head-row"><div><div class="eyebrow">${esc(w.couple)} / GUESTS</div><h1 class="page-title">${t('guestTitle')}</h1><div class="sub">${w.guests.length} ${t('guestsCount').toLowerCase()}</div></div><button class="btn primary" onclick="openGuestModal()">＋ ${t('addGuest')}</button></div><section class="panel"><div class="panel-head"><h3>${esc(w.couple)}</h3><input style="max-width:240px;padding:10px;border:1px solid var(--line);border-radius:6px" placeholder="${t('search')}" oninput="filterGuests(this.value)"></div><div id="guest-table">${guestTable(w)}</div></section>`)}
-function guestTable(w){if(!w.guests.length)return `<div class="empty">${t('noGuests')}</div>`;return `<div class="table-wrap"><table><thead><tr><th>${t('guestName')}</th><th>${t('seats')}</th><th>${t('table')}</th><th>${t('status')}</th><th>${t('invite')}</th></tr></thead><tbody>${w.guests.map(g=>`<tr data-name="${esc(g.name.toLowerCase())}"><td><strong>${esc(g.name)}</strong><div class="small">${esc(g.phone||'')}</div></td><td>${g.seats}</td><td><select onchange="assignTable('${g.id}',this.value)" style="padding:7px;border:1px solid var(--line);border-radius:5px"><option value="">${t('notAssigned')}</option>${w.tables.map(tb=>`<option value="${tb.id}" ${g.tableId===tb.id?'selected':''}>${esc(tb.name)}</option>`).join('')}</select></td><td><span class="pill ${g.status==='confirmed'?'ok':g.status==='declined'?'no':''}">${t(g.status)}</span></td><td><button class="btn" onclick="guestLink('${w.id}','${g.token}')">↗</button></td></tr>`).join('')}</tbody></table></div>`}
-function filterGuests(q){document.querySelectorAll('#guest-table tbody tr').forEach(r=>r.style.display=r.dataset.name.includes(q.toLowerCase())?'':'none')}
-function assignTable(gid,tid){let w=wedding(),g=w.guests.find(x=>x.id===gid),tb=w.tables.find(x=>x.id===tid);if(tb){let used=w.guests.filter(x=>x.tableId===tid&&x.id!==gid).reduce((a,x)=>a+x.seats,0);if(used+g.seats>tb.capacity){showToast('Capacité de la table dépassée');render('guests');return}}g.tableId=tid;persist();render('guests')}
-function seatingPage(){let w=wedding();shell('seating',`<div class="head-row"><div><div class="eyebrow">${esc(w.couple)} / SEATING</div><h1 class="page-title">${t('seatingTitle')}</h1><div class="sub">L’organisateur garde le contrôle exclusif du placement.</div></div><button class="btn primary" onclick="openTableModal()">＋ ${t('addTable')}</button></div><div class="wedding-grid">${w.tables.map(tb=>{let list=w.guests.filter(g=>g.tableId===tb.id),used=list.reduce((a,g)=>a+g.seats,0);return `<section class="panel"><div class="panel-head"><h3>${esc(tb.name)}</h3><span class="pill">${used} / ${tb.capacity}</span></div><div class="small">${t('tableGuests')}</div>${list.length?list.map(g=>`<p style="font-size:13px;margin:12px 0 0">• ${esc(g.name)} <span class="small">(${g.seats})</span></p>`).join(''):`<div class="empty" style="margin-top:12px">Aucun invité placé</div>`}</section>`}).join('')||`<div class="empty">${t('noTables')}</div>`}</div>`)}
-function checkinPage(){let w=wedding();shell('checkin',`<div class="head-row"><div><div class="eyebrow">${esc(w.couple)} / ARRIVALS</div><h1 class="page-title">${t('checkTitle')}</h1><div class="sub">${t('checkHint')}</div></div></div><section class="panel"><input id="check-search" placeholder="${t('search')}" oninput="drawCheckin(this.value)" style="width:100%;max-width:400px;padding:12px;border:1px solid var(--line);border-radius:6px"><div id="check-results" style="margin-top:18px">${checkRows(w,'')}</div></section>`)}
-function checkRows(w,q){let a=w.guests.filter(g=>g.name.toLowerCase().includes(q.toLowerCase())||g.token.toLowerCase().includes(q.toLowerCase()));return a.length?a.map(g=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)"><div><strong>${esc(g.name)}</strong><div class="small">${esc(g.token)} · ${g.seats} place(s) · ${esc(w.tables.find(tb=>tb.id===g.tableId)?.name||t('notAssigned'))}</div></div>${g.arrived?`<span class="pill ok">${t('arrived')}</span>`:`<button class="btn gold" onclick="checkIn('${g.id}')">${t('mark')}</button>`}</div>`).join(''):`<div class="empty">${t('noGuests')}</div>`}
-function drawCheckin(q){$('#check-results').innerHTML=checkRows(wedding(),q)}
-function checkIn(id){let g=wedding().guests.find(x=>x.id===id);if(g){g.arrived=true;persist();render('checkin');showToast(t('arrived'))}}
-function openModal(title,body,onSave){$('#modal-root').innerHTML=`<div class="modal-back" onclick="if(event.target===this)closeModal()"><div class="modal"><h2>${title}</h2>${body}<div class="modal-actions"><button class="btn" onclick="closeModal()">${t('cancel')}</button><button class="btn primary" onclick="${onSave}">${t('save')}</button></div></div></div>`}
-function closeModal(){$('#modal-root').innerHTML=''}
-function openWeddingModal(){openModal(t('createTitle'),`<div class="form-grid"><div class="field full"><label>${t('couple')}</label><input id="f-couple" placeholder="Ex. Theuriet & Naomi"></div><div class="field"><label>${t('date')}</label><input id="f-date" type="date"></div><div class="field"><label>${t('venue')}</label><input id="f-venue" placeholder="Lubumbashi, RDC"></div></div><p class="notice">La date peut rester vide. Le compte à rebours restera désactivé tant qu’elle n’est pas définie.</p>`,'saveWedding()')}
-function saveWedding(){let couple=$('#f-couple').value.trim();if(!couple){showToast('Indique les noms du couple');return}let id='w-'+Date.now();db.weddings.push({id,couple,date:$('#f-date').value,venue:$('#f-venue').value.trim(),message:translations[db.lang].welcomeText,tables:[],guests:[]});db.selected=id;persist();closeModal();go('weddings')}
-function openGuestModal(){openModal(t('addGuest'),`<div class="form-grid"><div class="field full"><label>${t('guestName')}</label><input id="f-name" placeholder="Jean & Marie"></div><div class="field"><label>${t('email')}</label><input id="f-phone" placeholder="+243…"></div><div class="field"><label>${t('seats')}</label><input id="f-seats" type="number" min="1" max="20" value="1"></div></div>`,'saveGuest()')}
-function saveGuest(){let name=$('#f-name').value.trim();if(!name){showToast('Indique le nom de l’invité');return}let w=wedding(),n=String(w.guests.length+1).padStart(4,'0');w.guests.push({id:'g'+Date.now(),name,phone:$('#f-phone').value.trim(),seats:Math.max(1,Number($('#f-seats').value)||1),tableId:'',status:'pending',token:'NUP-'+new Date().getFullYear()+'-'+n,arrived:false});persist();closeModal();render('guests')}
-function openTableModal(){openModal(t('addTable'),`<div class="form-grid"><div class="field"><label>${t('tableName')}</label><input id="f-tname" placeholder="Table 04"></div><div class="field"><label>${t('capacity')}</label><input id="f-cap" type="number" min="1" value="8"></div></div>`,'saveTable()')}
-function saveTable(){let name=$('#f-tname').value.trim();if(!name){showToast('Donne un nom à la table');return}wedding().tables.push({id:'t'+Date.now(),name,capacity:Math.max(1,Number($('#f-cap').value)||8)});persist();closeModal();render('seating')}
-function guestLink(wid,token){let url=location.origin+location.pathname+'?wedding='+encodeURIComponent(wid)+'&invite='+encodeURIComponent(token);openShare(url)}
-function publicLink(wid){let url=location.origin+location.pathname+'?wedding='+encodeURIComponent(wid);openShare(url)}
-function openShare(url){openModal(t('invite'),`<div class="field"><label>URL</label><input id="share-url" value="${esc(url)}" readonly></div><div class="actions" style="margin-top:14px"><button class="btn" onclick="copyShare()">⧉ ${t('copy')}</button><button class="btn gold" onclick="whatsShare()">◉ ${t('share')}</button></div><p class="notice">Pour l’instant, ce prototype fonctionne sur cet appareil. Pour partager un vrai lien public, il faudra publier le site sur Internet.</p>`,'closeModal()')}
-function copyShare(){let v=$('#share-url').value;navigator.clipboard?.writeText(v).then(()=>showToast('Lien copié')).catch(()=>showToast(v))}
-function whatsShare(){let v=$('#share-url').value;window.open('https://wa.me/?text='+encodeURIComponent('Voici votre invitation : '+v),'_blank')}
-function renderInvite(wid,token){let w=db.weddings.find(x=>x.id===wid);if(!w){$('#app').innerHTML=`<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;return}let g=token?w.guests.find(x=>x.token===token):null;if(token&&!g){$('#app').innerHTML=`<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1></div></div>`;return}
-let table=g?w.tables.find(x=>x.id===g.tableId):null;$('#app').innerHTML=`<div class="invite-page"><article class="invite-card"><div class="invite-kicker">✧ NUPTIA · ${t('invited')} ✧</div><div class="invite-title">${esc(w.couple.split('&')[0]||w.couple)}<div class="amp">&</div>${esc(w.couple.split('&')[1]||'')}</div><div class="invite-rule"></div><p class="invite-copy">${esc(w.message||t('welcomeText'))}</p>${w.photo?`<img class="invite-photo" src="${w.photo}" alt="Photo des mariés">`:''}${w.story?`<div class="invite-extra"><h3>Notre histoire</h3><p>${esc(w.story)}</p></div>`:''}<div class="invite-details"><div class="detail"><strong>${w.date?new Date(w.date+'T12:00:00').toLocaleDateString(db.lang==='fr'?'fr-FR':'en-GB',{day:'numeric',month:'long',year:'numeric'}):'À venir'}</strong><span>${t('dateLabel')}</span></div><div class="detail"><strong>${esc(w.venue||'À préciser')}</strong><span>${t('placeLabel')}</span></div></div>${(w.ceremony||w.reception||w.program||w.dressCode||w.websiteNote)?`<div class="invite-extra">${w.ceremony?`<h3>Cérémonie</h3><p>${esc(w.ceremony)}</p>`:''}${w.reception?`<h3>Réception</h3><p>${esc(w.reception)}</p>`:''}${w.dressCode?`<h3>Dress code</h3><p>${esc(w.dressCode)}</p>`:''}${w.program?`<h3>Programme</h3><p>${esc(w.program)}</p>`:''}${w.websiteNote?`<p>${esc(w.websiteNote)}</p>`:''}${w.mapUrl?`<p><a href="${esc(w.mapUrl)}" target="_blank" rel="noopener">Voir l’itinéraire sur Google Maps ↗</a></p>`:''}</div>`:''}${w.musicUrl?`<div class="music-player"><div class="small">Notre musique</div><audio controls preload="none" src="${esc(w.musicUrl)}">Votre navigateur ne prend pas en charge la lecture audio.</audio></div>`:''}${g?`<div class="guest-box"><div class="small">${t('invited')}</div><strong>${esc(g.name)}</strong><p class="small">${t('places')} : ${g.seats} · ${t('yourTable')} : ${esc(table?.name||t('notAssigned'))}</p><div id="qr" class="qr"></div><div class="small">${t('scan')} : ${esc(g.token)}</div><div class="actions" style="justify-content:center;margin-top:14px"><button class="btn primary" onclick="guestRsvp('${wid}','${g.token}')">${t('rsvp')}</button></div></div>`:''}<div class="invite-rule"></div><div class="small">NUPTIA · Chaque union mérite une belle invitation.</div><div style="margin-top:18px"><button class="lang" onclick="setLang('${db.lang==='fr'?'en':'fr'}');renderInvite('${wid}','${token||''}')">${db.lang==='fr'?'English':'Français'}</button></div></article></div>`;
-if(g&&window.QRCode){new QRCode($('#qr'),{text:g.token,width:112,height:112,colorDark:'#29251f',colorLight:'#fffdf9',correctLevel:QRCode.CorrectLevel.M})}}
-function guestRsvp(wid,token){let w=db.weddings.find(x=>x.id===wid),g=w.guests.find(x=>x.token===token);g.status='confirmed';persist();showToast(t('rsvpDone'))}
-function setLang(v){db.lang=v;persist();if(location.search){let p=new URLSearchParams(location.search);renderInvite(p.get('wedding'),p.get('invite'))}else render(location.hash.slice(1)||'overview')}
-window.addEventListener('popstate',()=>render(location.hash.slice(1)||'overview'));
-render(location.hash.slice(1)||'overview');
+
+let db;
+try {
+  const rawV3 = localStorage.getItem(storeKey);
+  const rawV2 = localStorage.getItem('nuptia_demo_v1');
+  db = JSON.parse(rawV3 || rawV2) || initial();
+} catch (e) {
+  db = initial();
+}
+
+(db.weddings || []).forEach(w => {
+  w.story = w.story || '';
+  w.photo = w.photo || '';
+  w.ceremony = w.ceremony || '';
+  w.reception = w.reception || w.venue || '';
+  w.mapUrl = w.mapUrl || '';
+  w.gpsLat = w.gpsLat || '';
+  w.gpsLng = w.gpsLng || '';
+  w.musicUrl = w.musicUrl || '';
+  w.musicData = w.musicData || '';
+  w.musicName = w.musicName || '';
+  w.dressCodes = Array.isArray(w.dressCodes) ? w.dressCodes : [];
+  w.dressCode = w.dressCode || '';
+  w.program = w.program || '';
+  w.websiteNote = w.websiteNote || '';
+  w.message = w.message || translations[db.lang || 'fr'].welcomeText;
+  w.guests = w.guests || [];
+  w.tables = w.tables || [];
+  w.wishes = w.wishes || [];
+});
+
+let cloudCfg = { url: '', anonKey: '', userEmail: '' };
+try {
+  cloudCfg = Object.assign(cloudCfg, JSON.parse(localStorage.getItem(cloudCfgKey) || '{}'));
+} catch (e) {}
+
+let supabaseClient = null;
+let currentUser = null;
+
+function initSupabase() {
+  if (cloudCfg.url && cloudCfg.anonKey && window.supabase) {
+    try {
+      supabaseClient = window.supabase.createClient(cloudCfg.url.trim(), cloudCfg.anonKey.trim());
+      supabaseClient.auth.getSession().then(({ data }) => {
+        currentUser = data?.session?.user || null;
+        if (currentUser) syncFromCloud(true);
+      });
+    } catch (e) {
+      supabaseClient = null;
+    }
+  }
+}
+initSupabase();
+
+const t = k => (translations[db.lang] && translations[db.lang][k]) || translations.fr[k] || k;
+
+function persist(skipCloud) {
+  try {
+    localStorage.setItem(storeKey, JSON.stringify(db));
+  } catch (e) {
+    showToast('Stockage navigateur saturé : réduisez la taille du fichier média.');
+  }
+  if (!skipCloud && supabaseClient && currentUser) {
+    pushToCloud();
+  }
+}
+
+function esc(s = '') {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function wedding() {
+  if (!db.weddings.length) return null;
+  return db.weddings.find(w => w.id === db.selected) || db.weddings[0];
+}
+
+function allGuests() {
+  return db.weddings.reduce((a, w) => a.concat(w.guests || []), []);
+}
+
+function showToast(msg) {
+  $('#toast-root').innerHTML = `<div class="toast">${esc(msg)}</div>`;
+  setTimeout(() => { $('#toast-root').innerHTML = ''; }, 2600);
+}
+
+function go(page) {
+  history.pushState({ page }, '', `#${page}`);
+  render(page);
+}
+
+function buildMapLink(w) {
+  if (w.gpsLat && w.gpsLng) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(w.gpsLat + ',' + w.gpsLng)}`;
+  }
+  if (w.mapUrl) return w.mapUrl;
+  const query = w.reception || w.ceremony || w.venue;
+  return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '';
+}
+
+function formatDressCode(w) {
+  const dict = DRESS_OPTIONS[db.lang] || DRESS_OPTIONS.fr;
+  const labels = (w.dressCodes || []).map(id => dict.find(o => o.id === id)?.label).filter(Boolean);
+  if (w.dressCode) labels.push(w.dressCode);
+  return labels.join(' • ');
+}
+
+function header() {
+  const isOnline = Boolean(supabaseClient && currentUser);
+  return `<header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">N</div>
+      <div>
+        <div class="brand-name">NUPTIA</div>
+        <div class="brand-sub">Wedding experiences · V3</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn ghost sm" onclick="go('sync')" title="Synchronisation">
+        <span class="sync-dot ${isOnline ? 'online' : ''}"></span>${isOnline ? 'Cloud OK' : 'Local'}
+      </button>
+      <select class="lang" onchange="setLang(this.value)">
+        <option value="fr" ${db.lang === 'fr' ? 'selected' : ''}>FR</option>
+        <option value="en" ${db.lang === 'en' ? 'selected' : ''}>EN</option>
+      </select>
+    </div>
+  </header>`;
+}
+
+function shell(page, content) {
+  const w = wedding();
+  const navItems = [
+    ['overview', '⌂'],
+    ['weddings', '♡'],
+    ['settings', '✧'],
+    ['guests', '♧'],
+    ['seating', '▦'],
+    ['checkin', '✓'],
+    ['stats', '◔'],
+    ['guestbook', '✎'],
+    ['sync', '☁']
+  ];
+  $('#app').innerHTML = header() + `<div class="layout">
+    <aside class="sidebar">
+      <div class="side-label">Espace actif</div>
+      ${w ? `<div class="active-wedding-badge"><span class="small">Mariage sélectionné</span><strong>${esc(w.couple)}</strong></div>` : ''}
+      ${navItems.map(([k, i]) => `<button class="nav ${page === k ? 'active' : ''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}
+    </aside>
+    <main class="main">${content}<div class="footer">${t('adminNote')}</div></main>
+  </div>`;
+}
+
+function render(page = 'overview') {
+  const params = new URLSearchParams(location.search);
+  if (params.has('wedding')) {
+    renderInvite(params.get('wedding'), params.get('invite'));
+    return;
+  }
+  const valid = ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'];
+  if (!valid.includes(page)) page = 'overview';
+  if (page === 'overview') return dashboard();
+  if (page === 'weddings') return weddingsPage();
+  if (page === 'settings') return settingsPage();
+  if (page === 'guests') return guestsPage();
+  if (page === 'seating') return seatingPage();
+  if (page === 'checkin') return checkinPage();
+  if (page === 'stats') return statsPage();
+  if (page === 'guestbook') return guestbookPage();
+  if (page === 'sync') return syncPage();
+}
+
+function dashboard() {
+  const gs = allGuests();
+  const totalSeats = gs.reduce((a, g) => a + (Number(g.seats) || 1), 0);
+  shell('overview', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">NUPTIA / DASHBOARD</div>
+        <h1 class="page-title">${t('welcome')}</h1>
+        <div class="sub">${t('hello')}</div>
+      </div>
+      <button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>
+    </div>
+    <div class="cards">
+      <div class="stat"><div class="stat-label">${t('active')}</div><div class="stat-num">${db.weddings.length}</div></div>
+      <div class="stat"><div class="stat-label">${t('guestsCount')}</div><div class="stat-num">${gs.length}</div></div>
+      <div class="stat"><div class="stat-label">${t('seatsTotal')}</div><div class="stat-num">${totalSeats}</div></div>
+      <div class="stat"><div class="stat-label">${t('checked')}</div><div class="stat-num">${gs.filter(g => g.arrived).length}</div></div>
+    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <div><h3>${t('yourWeddings')}</h3><div class="small">Chaque couple dispose de son espace privé et indépendant</div></div>
+        <button class="btn" onclick="go('weddings')">${t('weddings')} →</button>
+      </div>
+      ${weddingCards()}
+    </section>
+  `);
+}
+
+function weddingCards() {
+  if (!db.weddings.length) {
+    return `<div class="empty">Aucun espace de mariage pour le moment. Cliquez sur « ${t('newWedding')} ».</div>`;
+  }
+  const activeW = wedding();
+  return `<div class="wedding-grid">${db.weddings.map(w => {
+    const isSel = activeW && activeW.id === w.id;
+    const coverStyle = w.photo ? `style="background-image:linear-gradient(#29251f55,#29251f88),url('${w.photo}');color:white"` : '';
+    return `<article class="wedding-card ${isSel ? 'selected' : ''}">
+      <div class="card-cover" ${coverStyle}>${w.photo ? esc(w.couple) : 'A day to remember'}</div>
+      <div class="wedding-body">
+        <h3>${esc(w.couple)}</h3>
+        <div class="meta">${w.date ? esc(w.date) : t('datePending')} · ${esc(w.venue || '')} · ${(w.guests || []).length} invité(s)</div>
+        <div class="actions">
+          <button class="btn primary sm" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button>
+          <button class="btn sm" onclick="selectWedding('${w.id}');go('guests')">${t('open')}</button>
+          <button class="btn sm" onclick="publicLink('${w.id}')">${t('view')}</button>
+          <button class="btn danger sm" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('')}</div>`;
+}
+
+function weddingsPage() {
+  shell('weddings', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">NUPTIA / WORKSPACES</div>
+        <h1 class="page-title">${t('weddings')}</h1>
+        <div class="sub">Créez, gérez ou supprimez en toute sécurité un espace distinct pour chaque couple.</div>
+      </div>
+      <button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>
+    </div>
+    ${weddingCards()}
+  `);
+}
+
+function selectWedding(id) {
+  db.selected = id;
+  persist(true);
+}
+
+function confirmDeleteWedding(id) {
+  const target = db.weddings.find(w => w.id === id);
+  if (!target) return;
+  openModal(
+    t('deleteWeddingTitle'),
+    `<p style="line-height:1.7;margin-top:0">${t('deleteWeddingWarn')}</p>
+     <div style="padding:12px;border:1px solid #e6c4bf;background:#fff5f4;border-radius:8px;font-weight:600;color:var(--red)">
+       Espace concerné : ${esc(target.couple)}
+     </div>`,
+    `deleteWedding('${id}')`,
+    t('delete'),
+    'danger'
+  );
+}
+
+function deleteWedding(id) {
+  db.weddings = db.weddings.filter(w => w.id !== id);
+  if (db.selected === id) {
+    db.selected = db.weddings[0]?.id || null;
+  }
+  persist();
+  closeModal();
+  showToast('Espace de mariage supprimé');
+  render('weddings');
+}
+
+function settingsPage() {
+  const w = wedding();
+  if (!w) {
+    shell('settings', `<div class="empty">Créez d'abord un espace de mariage pour le personnaliser.</div>`);
+    return;
+  }
+  const opts = DRESS_OPTIONS[db.lang] || DRESS_OPTIONS.fr;
+  shell('settings', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">NUPTIA / PERSONNALISATION</div>
+        <h1 class="page-title">${esc(w.couple)}</h1>
+        <div class="sub">Configurez chaque détail de l’invitation depuis votre téléphone.</div>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="publicLink('${w.id}')">Voir l’invitation ↗</button>
+        <button class="btn danger" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head"><div><h3>1. Les mariés et leur histoire</h3><div class="section-note">Photo du couple, date et message aux invités.</div></div></div>
+      <div class="editor-grid">
+        <div class="field"><label>Noms du couple</label><input id="ed-couple" value="${esc(w.couple)}"></div>
+        <div class="field"><label>Date du mariage (active le compte à rebours)</label><input id="ed-date" type="date" value="${esc(w.date || '')}"></div>
+        <div class="field full">
+          <label>Photo des mariés (depuis le téléphone)</label>
+          <input id="ed-photo" type="file" accept="image/*" onchange="previewWeddingPhoto(this)">
+          <img id="photo-preview" class="photo-preview ${w.photo ? '' : 'hidden'}" src="${w.photo || ''}" alt="Aperçu photo">
+          ${w.photo ? `<button class="btn sm" type="button" onclick="removeWeddingPhoto()" style="margin-top:8px">Retirer la photo</button>` : ''}
+        </div>
+        <div class="field full"><label>Histoire ou présentation du couple</label><textarea id="ed-story" placeholder="Racontez brièvement votre histoire…">${esc(w.story || '')}</textarea></div>
+        <div class="field full"><label>Message d’invitation</label><textarea id="ed-message">${esc(w.message || '')}</textarea></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><h3>2. Lieux, Google Maps et coordonnées GPS</h3><div class="section-note">Indiquez les adresses, un lien Google Maps ou les coordonnées GPS exactes.</div></div></div>
+      <div class="editor-grid">
+        <div class="field"><label>Lieu de la cérémonie</label><input id="ed-ceremony" value="${esc(w.ceremony || '')}" placeholder="Église / salle et adresse"></div>
+        <div class="field"><label>Lieu de la réception</label><input id="ed-reception" value="${esc(w.reception || w.venue || '')}" placeholder="Salle de réception et adresse"></div>
+        <div class="field"><label>Latitude GPS (facultatif)</label><input id="ed-lat" value="${esc(w.gpsLat || '')}" placeholder="Ex. -11.6647"></div>
+        <div class="field"><label>Longitude GPS (facultatif)</label><input id="ed-lng" value="${esc(w.gpsLng || '')}" placeholder="Ex. 27.4794"></div>
+        <div class="field full">
+          <label>Lien Google Maps direct (facultatif si GPS rempli)</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="ed-map" type="url" style="flex:1;min-width:220px" value="${esc(w.mapUrl || '')}" placeholder="https://maps.google.com/…">
+            <button class="btn" type="button" onclick="capturePhoneGps()">Ma position GPS actuelle</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><h3>3. Musique depuis le téléphone, Dress code & Programme</h3><div class="section-note">Choisissez un fichier audio sur votre téléphone et cochez le dress code.</div></div></div>
+      <div class="editor-grid">
+        <div class="field full">
+          <label>Sélectionner une musique depuis le téléphone (MP3, M4A, OGG)</label>
+          <input id="ed-music-file" type="file" accept="audio/*" onchange="handleMusicFile(this)">
+          <div id="music-status" class="small" style="margin-top:6px">
+            ${w.musicName ? `Fichier chargé : <strong>${esc(w.musicName)}</strong>` : 'Aucun fichier audio sélectionné depuis le téléphone.'}
+          </div>
+          ${(w.musicData || w.musicUrl) ? `<button class="btn sm" type="button" onclick="removeWeddingMusic()" style="margin-top:8px">Retirer la musique</button>` : ''}
+        </div>
+        <div class="field full">
+          <label>Ou lien audio direct (MP3 en ligne)</label>
+          <input id="ed-music" type="url" value="${esc(w.musicUrl || '')}" placeholder="https://…/musique.mp3">
+        </div>
+        <div class="field full">
+          <label>Dress code (cochez une ou plusieurs options)</label>
+          <div class="check-grid">
+            ${opts.map(o => `<label class="check-item"><input type="checkbox" name="dc-opt" value="${o.id}" ${(w.dressCodes || []).includes(o.id) ? 'checked' : ''}><span>${esc(o.label)}</span></label>`).join('')}
+          </div>
+        </div>
+        <div class="field"><label>Précision supplémentaire dress code</label><input id="ed-dress" value="${esc(w.dressCode || '')}" placeholder="Ex. Couleur beige et doré souhaitée"></div>
+        <div class="field"><label>Consigne particulière</label><input id="ed-note" value="${esc(w.websiteNote || '')}" placeholder="Ex. Merci d’arriver 30 min avant"></div>
+        <div class="field full"><label>Programme de la journée</label><textarea id="ed-program" placeholder="10h00 – Cérémonie\n14h00 – Réception\n18h00 – Soirée">${esc(w.program || '')}</textarea></div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="btn primary" onclick="saveWeddingDetails()">Enregistrer les modifications</button>
+      <button class="btn" onclick="publicLink('${w.id}')">Prévisualiser l’invitation</button>
+    </div>
+  `);
+}
+
+let pendingWeddingPhoto = '';
+let pendingMusicData = '';
+let pendingMusicName = '';
+
+function capturePhoneGps() {
+  if (!navigator.geolocation) {
+    showToast('Géolocalisation non disponible sur ce navigateur');
+    return;
+  }
+  showToast('Recherche de votre position GPS…');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      $('#ed-lat').value = pos.coords.latitude.toFixed(6);
+      $('#ed-lng').value = pos.coords.longitude.toFixed(6);
+      showToast('Coordonnées GPS capturées !');
+    },
+    () => showToast('Impossible de récupérer le GPS (autorisez la localisation)')
+  );
+}
+
+function previewWeddingPhoto(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('Choisissez un fichier image');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1000;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      pendingWeddingPhoto = canvas.toDataURL('image/jpeg', 0.76);
+      const preview = $('#photo-preview');
+      preview.src = pendingWeddingPhoto;
+      preview.classList.remove('hidden');
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeWeddingPhoto() {
+  pendingWeddingPhoto = '';
+  wedding().photo = '';
+  persist();
+  render('settings');
+}
+
+function handleMusicFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 4.5 * 1024 * 1024 && !supabaseClient) {
+    showToast('Audio > 4,5 Mo : utilisez un fichier plus léger ou connectez Supabase.');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingMusicData = reader.result;
+    pendingMusicName = file.name;
+    $('#music-status').innerHTML = `Prêt à enregistrer : <strong>${esc(file.name)}</strong>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeWeddingMusic() {
+  pendingMusicData = '';
+  pendingMusicName = '';
+  const w = wedding();
+  w.musicData = '';
+  w.musicName = '';
+  w.musicUrl = '';
+  persist();
+  render('settings');
+}
+
+function saveWeddingDetails() {
+  const w = wedding();
+  w.couple = $('#ed-couple').value.trim() || w.couple;
+  w.date = $('#ed-date').value;
+  w.story = $('#ed-story').value.trim();
+  w.message = $('#ed-message').value.trim();
+  w.ceremony = $('#ed-ceremony').value.trim();
+  w.reception = $('#ed-reception').value.trim();
+  w.venue = w.reception || w.ceremony || w.venue;
+  w.gpsLat = $('#ed-lat').value.trim();
+  w.gpsLng = $('#ed-lng').value.trim();
+  w.mapUrl = $('#ed-map').value.trim();
+  w.musicUrl = $('#ed-music').value.trim();
+  w.dressCodes = Array.from(document.querySelectorAll('input[name="dc-opt"]:checked')).map(el => el.value);
+  w.dressCode = $('#ed-dress').value.trim();
+  w.websiteNote = $('#ed-note').value.trim();
+  w.program = $('#ed-program').value.trim();
+
+  if (pendingWeddingPhoto) w.photo = pendingWeddingPhoto;
+  if (pendingMusicData) {
+    w.musicData = pendingMusicData;
+    w.musicName = pendingMusicName;
+  }
+  pendingWeddingPhoto = '';
+  pendingMusicData = '';
+  pendingMusicName = '';
+
+  persist();
+  showToast('Modifications enregistrées');
+  render('settings');
+}
+
+function guestsPage() {
+  const w = wedding();
+  if (!w) return go('weddings');
+  shell('guests', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">${esc(w.couple)} / GUESTS</div>
+        <h1 class="page-title">${t('guestTitle')}</h1>
+        <div class="sub">${w.guests.length} invité(s) · ${w.guests.reduce((a, g) => a + g.seats, 0)} place(s)</div>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="exportGuestsCsv()">⤓ ${t('exportCsv')}</button>
+        <button class="btn primary" onclick="openGuestModal()">＋ ${t('addGuest')}</button>
+      </div>
+    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <h3>${esc(w.couple)}</h3>
+        <input style="max-width:240px;padding:10px;border:1px solid var(--line);border-radius:6px" placeholder="${t('search')}" oninput="filterGuests(this.value)">
+      </div>
+      <div id="guest-table">${guestTable(w)}</div>
+    </section>
+  `);
+}
+
+function guestTable(w) {
+  if (!w.guests.length) return `<div class="empty">${t('noGuests')}</div>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>${t('guestName')}</th><th>${t('seats')}</th><th>${t('table')}</th><th>${t('status')}</th><th>Actions</th></tr></thead>
+    <tbody>${w.guests.map(g => `<tr data-name="${esc(g.name.toLowerCase())}">
+      <td><strong>${esc(g.name)}</strong><div class="small">${esc(g.phone || '')} · ${esc(g.token)}</div></td>
+      <td>${g.seats}</td>
+      <td>
+        <select onchange="assignTable('${g.id}',this.value)" style="padding:7px;border:1px solid var(--line);border-radius:5px">
+          <option value="">${t('notAssigned')}</option>
+          ${w.tables.map(tb => `<option value="${tb.id}" ${g.tableId === tb.id ? 'selected' : ''}>${esc(tb.name)}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select onchange="changeGuestStatus('${g.id}',this.value)" style="padding:6px;border:1px solid var(--line);border-radius:5px">
+          <option value="pending" ${g.status === 'pending' ? 'selected' : ''}>${t('pending')}</option>
+          <option value="confirmed" ${g.status === 'confirmed' ? 'selected' : ''}>${t('confirmed')}</option>
+          <option value="declined" ${g.status === 'declined' ? 'selected' : ''}>${t('declined')}</option>
+        </select>
+      </td>
+      <td class="actions">
+        <button class="btn sm" onclick="guestLink('${w.id}','${g.token}')" title="Partager">↗</button>
+        <button class="btn danger sm" onclick="removeGuest('${g.id}')" title="Supprimer">✕</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function changeGuestStatus(gid, status) {
+  const g = wedding().guests.find(x => x.id === gid);
+  if (g) {
+    g.status = status;
+    persist();
+    showToast('Statut mis à jour');
+  }
+}
+
+function removeGuest(gid) {
+  const w = wedding();
+  w.guests = w.guests.filter(g => g.id !== gid);
+  persist();
+  render('guests');
+}
+
+function filterGuests(q) {
+  document.querySelectorAll('#guest-table tbody tr').forEach(r => {
+    r.style.display = r.dataset.name.includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function assignTable(gid, tid) {
+  const w = wedding();
+  const g = w.guests.find(x => x.id === gid);
+  const tb = w.tables.find(x => x.id === tid);
+  if (tb) {
+    const used = w.guests.filter(x => x.tableId === tid && x.id !== gid).reduce((a, x) => a + x.seats, 0);
+    if (used + g.seats > tb.capacity) {
+      showToast('Capacité de la table dépassée');
+      render('guests');
+      return;
+    }
+  }
+  g.tableId = tid;
+  persist();
+  render('guests');
+}
+
+function seatingPage() {
+  const w = wedding();
+  if (!w) return go('weddings');
+  const unassigned = w.guests.filter(g => !g.tableId);
+  shell('seating', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">${esc(w.couple)} / FLOOR PLAN</div>
+        <h1 class="page-title">${t('seatingTitle')}</h1>
+        <div class="sub">Visualisez la disposition de la salle, la capacité de chaque table et les invités non encore placés.</div>
+      </div>
+      <button class="btn primary" onclick="openTableModal()">＋ ${t('addTable')}</button>
+    </div>
+
+    <div class="floor-plan">
+      <div class="floor-stage">✧ Table d’honneur / Podium ✧</div>
+      ${w.tables.length ? `<div class="floor-grid">
+        ${w.tables.map(tb => {
+          const list = w.guests.filter(g => g.tableId === tb.id);
+          const used = list.reduce((a, g) => a + g.seats, 0);
+          const isFull = used >= tb.capacity;
+          return `<div class="floor-table ${isFull ? 'full-cap' : ''}">
+            <div class="floor-circle">
+              <strong style="font-size:15px">${used}/${tb.capacity}</strong>
+              <span class="small">places</span>
+            </div>
+            <h4 style="margin:0 0 8px;font-family:'Playfair Display',serif;font-size:18px">${esc(tb.name)}</h4>
+            <div style="text-align:left;border-top:1px solid var(--line);padding-top:8px;min-height:48px">
+              ${list.length ? list.map(g => `<div class="small" style="color:var(--ink);margin:4px 0">• ${esc(g.name)} (${g.seats})</div>`).join('') : `<div class="small">Table libre</div>`}
+            </div>
+            <div style="margin-top:10px;display:flex;justify-content:center;gap:6px">
+              <button class="btn danger sm" onclick="removeTable('${tb.id}')">Supprimer</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : `<div class="empty">${t('noTables')}</div>`}
+    </div>
+
+    ${unassigned.length ? `<section class="panel">
+      <h3>Invités en attente de placement (${unassigned.length})</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+        ${unassigned.map(g => `<span class="pill">${esc(g.name)} (${g.seats} pl.)</span>`).join('')}
+      </div>
+    </section>` : ''}
+  `);
+}
+
+function removeTable(tid) {
+  const w = wedding();
+  w.tables = w.tables.filter(tb => tb.id !== tid);
+  w.guests.forEach(g => { if (g.tableId === tid) g.tableId = ''; });
+  persist();
+  render('seating');
+}
+
+function checkinPage() {
+  const w = wedding();
+  if (!w) return go('weddings');
+  shell('checkin', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">${esc(w.couple)} / ARRIVALS</div>
+        <h1 class="page-title">${t('checkTitle')}</h1>
+        <div class="sub">${t('checkHint')}</div>
+      </div>
+    </div>
+    <section class="panel">
+      <input id="check-search" placeholder="${t('search')}" oninput="drawCheckin(this.value)" style="width:100%;max-width:420px;padding:12px;border:1px solid var(--line);border-radius:6px">
+      <div id="check-results" style="margin-top:18px">${checkRows(w, '')}</div>
+    </section>
+  `);
+}
+
+function checkRows(w, q) {
+  const a = w.guests.filter(g => g.name.toLowerCase().includes(q.toLowerCase()) || g.token.toLowerCase().includes(q.toLowerCase()));
+  return a.length ? a.map(g => `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)">
+    <div>
+      <strong>${esc(g.name)}</strong>
+      <div class="small">${esc(g.token)} · ${g.seats} place(s) · ${esc(w.tables.find(tb => tb.id === g.tableId)?.name || t('notAssigned'))}</div>
+    </div>
+    ${g.arrived ? `<span class="pill ok">${t('arrived')}</span>` : `<button class="btn gold" onclick="checkIn('${g.id}')">${t('mark')}</button>`}
+  </div>`).join('') : `<div class="empty">${t('noGuests')}</div>`;
+}
+
+function drawCheckin(q) {
+  $('#check-results').innerHTML = checkRows(wedding(), q);
+}
+
+function checkIn(id) {
+  const g = wedding().guests.find(x => x.id === id);
+  if (g) {
+    g.arrived = true;
+    persist();
+    render('checkin');
+    showToast(t('arrived'));
+  }
+}
+
+function statsPage() {
+  const w = wedding();
+  if (!w) return go('weddings');
+  const gs = w.guests || [];
+  const totalInvites = gs.length;
+  const confirmed = gs.filter(g => g.status === 'confirmed');
+  const pending = gs.filter(g => g.status === 'pending');
+  const declined = gs.filter(g => g.status === 'declined');
+  const arrived = gs.filter(g => g.arrived);
+
+  const totalSeats = gs.reduce((a, g) => a + g.seats, 0);
+  const confirmedSeats = confirmed.reduce((a, g) => a + g.seats, 0);
+  const totalCap = (w.tables || []).reduce((a, tb) => a + tb.capacity, 0);
+  const assignedSeats = gs.filter(g => g.tableId).reduce((a, g) => a + g.seats, 0);
+  const rate = totalInvites ? Math.round((confirmed.length / totalInvites) * 100) : 0;
+
+  shell('stats', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">${esc(w.couple)} / ANALYTICS</div>
+        <h1 class="page-title">${t('stats')}</h1>
+        <div class="sub">Suivi détaillé des confirmations, capacités et présences le jour J.</div>
+      </div>
+      <button class="btn primary" onclick="exportGuestsCsv()">⤓ ${t('exportCsv')}</button>
+    </div>
+
+    <div class="cards">
+      <div class="stat"><div class="stat-label">Taux de confirmation</div><div class="stat-num">${rate}%</div><div class="stat-sub">${confirmed.length} / ${totalInvites} invitations</div></div>
+      <div class="stat"><div class="stat-label">Places confirmées</div><div class="stat-num">${confirmedSeats}</div><div class="stat-sub">sur ${totalSeats} prévues</div></div>
+      <div class="stat"><div class="stat-label">Places attribuées (Tables)</div><div class="stat-num">${assignedSeats}</div><div class="stat-sub">capacité salle : ${totalCap}</div></div>
+      <div class="stat"><div class="stat-label">Présents accueillis</div><div class="stat-num">${arrived.length}</div><div class="stat-sub">${arrived.reduce((a, g) => a + g.seats, 0)} personnes entrées</div></div>
+    </div>
+
+    <section class="panel">
+      <h3>Répartition des réponses (RSVP)</h3>
+      <div style="margin-top:14px">
+        <div class="small">Confirmés (${confirmed.length})</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${totalInvites ? (confirmed.length / totalInvites) * 100 : 0}%;background:var(--green)"></div></div>
+        <div class="small">En attente (${pending.length})</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${totalInvites ? (pending.length / totalInvites) * 100 : 0}%;background:var(--gold)"></div></div>
+        <div class="small">Déclinés (${declined.length})</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${totalInvites ? (declined.length / totalInvites) * 100 : 0}%;background:var(--red)"></div></div>
+      </div>
+    </section>
+  `);
+}
+
+function exportGuestsCsv() {
+  const w = wedding();
+  if (!w) return;
+  const rows = [['Nom', 'Telephone', 'Places', 'Table', 'Statut', 'Code', 'Arrive']];
+  w.guests.forEach(g => {
+    const tb = w.tables.find(x => x.id === g.tableId)?.name || 'Non attribuée';
+    rows.push([g.name, g.phone || '', g.seats, tb, g.status, g.token, g.arrived ? 'Oui' : 'Non']);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `NUPTIA-${w.id}-invites.csv`;
+  a.click();
+  showToast('Rapport CSV téléchargé');
+}
+
+function guestbookPage() {
+  const w = wedding();
+  if (!w) return go('weddings');
+  const wishes = w.wishes || [];
+  shell('guestbook', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">${esc(w.couple)} / GUESTBOOK</div>
+        <h1 class="page-title">${t('guestbookTitle')}</h1>
+        <div class="sub">Messages laissés par vos proches depuis l’invitation numérique.</div>
+      </div>
+    </div>
+    <section class="panel">
+      ${wishes.length ? wishes.map(item => `
+        <div class="guestbook-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <strong>${esc(item.author)}</strong>
+            <p style="margin:6px 0 0;font-size:13px;line-height:1.6;color:#5c544b">${esc(item.text)}</p>
+          </div>
+          <button class="btn danger sm" onclick="deleteWish('${item.id}')">✕</button>
+        </div>
+      `).join('') : `<div class="empty">${t('noWishes')}</div>`}
+    </section>
+  `);
+}
+
+function deleteWish(wid) {
+  const w = wedding();
+  w.wishes = (w.wishes || []).filter(x => x.id !== wid);
+  persist();
+  render('guestbook');
+}
+
+function syncPage() {
+  const sqlSchema = `-- Exécutez ce script dans SQL Editor de votre projet Supabase
+create table if not exists public.nuptia_workspaces (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table public.nuptia_workspaces enable row level security;
+create policy "Owner access" on public.nuptia_workspaces
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);`;
+
+  shell('sync', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">NUPTIA / CLOUD & BACKUP</div>
+        <h1 class="page-title">Synchronisation & Sécurité</h1>
+        <div class="sub">Synchronisez vos mariages entre plusieurs téléphones avec Supabase et gérez vos sauvegardes.</div>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h3>1. Connexion Supabase (Multi-téléphones)</h3>
+      <div class="form-grid" style="margin-top:12px">
+        <div class="field"><label>URL du projet Supabase</label><input id="sb-url" value="${esc(cloudCfg.url)}" placeholder="https://xxxxx.supabase.co"></div>
+        <div class="field"><label>Clé publique (anon key)</label><input id="sb-key" value="${esc(cloudCfg.anonKey)}" placeholder="eyJhbGciOiJIUzI1NiIs..."></div>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn primary" onclick="saveSupabaseConfig()">Enregistrer la configuration</button>
+      </div>
+
+      ${supabaseClient ? `
+        <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line)">
+          ${currentUser ? `
+            <p class="small">Connecté en tant que : <strong>${esc(currentUser.email)}</strong></p>
+            <div class="actions">
+              <button class="btn gold" onclick="pushToCloud(true)">↑ Envoyer vers le cloud</button>
+              <button class="btn" onclick="syncFromCloud(false)">↓ Récupérer depuis le cloud</button>
+              <button class="btn danger" onclick="cloudSignOut()">Se déconnecter</button>
+            </div>
+          ` : `
+            <div class="form-grid">
+              <div class="field"><label>Email organisateur</label><input id="auth-email" type="email" value="${esc(cloudCfg.userEmail || '')}" placeholder="vous@exemple.com"></div>
+              <div class="field"><label>Mot de passe</label><input id="auth-pass" type="password" placeholder="••••••••"></div>
+            </div>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn primary" onclick="cloudSignIn()">Se connecter</button>
+              <button class="btn" onclick="cloudSignUp()">Créer un compte organisateur</button>
+            </div>
+          `}
+        </div>
+      ` : ''}
+    </section>
+
+    <section class="panel">
+      <h3>2. Sauvegarde et restauration manuelle (Fichier JSON)</h3>
+      <div class="section-note">Téléchargez une sauvegarde complète de tous vos mariages ou restaurez-la sur un autre téléphone.</div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn" onclick="downloadBackup()">⤓ Télécharger la sauvegarde (.json)</button>
+        <label class="btn" style="display:inline-block">⤒ Restaurer une sauvegarde<input type="file" accept=".json" style="display:none" onchange="restoreBackup(this)"></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>3. Script SQL de sécurité (RLS) à exécuter sur Supabase</h3>
+      <div class="section-note">Ce script garantit que chaque organisateur accède uniquement à ses propres espaces de mariage.</div>
+      <code class="sql">${esc(sqlSchema)}</code>
+    </section>
+  `);
+}
+
+function saveSupabaseConfig() {
+  cloudCfg.url = $('#sb-url').value.trim();
+  cloudCfg.anonKey = $('#sb-key').value.trim();
+  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  initSupabase();
+  showToast('Configuration Supabase enregistrée');
+  render('sync');
+}
+
+async function cloudSignUp() {
+  const email = $('#auth-email').value.trim();
+  const password = $('#auth-pass').value;
+  if (!email || !password) return showToast('Entrez email et mot de passe');
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) return showToast(error.message);
+  cloudCfg.userEmail = email;
+  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  currentUser = data.user;
+  showToast('Compte créé ! Vérifiez votre boîte mail si confirmation activée.');
+  render('sync');
+}
+
+async function cloudSignIn() {
+  const email = $('#auth-email').value.trim();
+  const password = $('#auth-pass').value;
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return showToast(error.message);
+  cloudCfg.userEmail = email;
+  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  currentUser = data.user;
+  await syncFromCloud(false);
+  render('sync');
+}
+
+async function cloudSignOut() {
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  render('sync');
+}
+
+async function pushToCloud(manual) {
+  if (!supabaseClient || !currentUser) return;
+  const { error } = await supabaseClient.from('nuptia_workspaces').upsert({
+    user_id: currentUser.id,
+    payload: db,
+    updated_at: new Date().toISOString()
+  });
+  if (error && manual) showToast('Erreur sync : ' + error.message);
+  else if (manual) showToast('Données synchronisées vers le cloud !');
+}
+
+async function syncFromCloud(silent) {
+  if (!supabaseClient || !currentUser) return;
+  const { data, error } = await supabaseClient.from('nuptia_workspaces').select('payload').eq('user_id', currentUser.id).maybeSingle();
+  if (error) {
+    if (!silent) showToast(error.message);
+    return;
+  }
+  if (data && data.payload && Array.isArray(data.payload.weddings)) {
+    db = data.payload;
+    persist(true);
+    if (!silent) showToast('Données récupérées depuis le cloud !');
+  } else {
+    await pushToCloud(false);
+  }
+}
+
+function downloadBackup() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `NUPTIA-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  showToast('Sauvegarde téléchargée');
+}
+
+function restoreBackup(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!Array.isArray(parsed.weddings)) throw new Error('Format invalide');
+      db = parsed;
+      persist();
+      showToast('Sauvegarde restaurée avec succès');
+      render('overview');
+    } catch (e) {
+      showToast('Fichier de sauvegarde invalide');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function openModal(title, body, onSave, saveLabel, saveClass = 'primary') {
+  $('#modal-root').innerHTML = `<div class="modal-back" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <h2>${title}</h2>
+      ${body}
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">${t('cancel')}</button>
+        <button class="btn ${saveClass}" onclick="${onSave}">${saveLabel || t('save')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function closeModal() {
+  $('#modal-root').innerHTML = '';
+}
+
+function openWeddingModal() {
+  openModal(t('createTitle'), `
+    <div class="form-grid">
+      <div class="field full"><label>${t('couple')}</label><input id="f-couple" placeholder="Ex. Theuriet & Naomi"></div>
+      <div class="field"><label>${t('date')}</label><input id="f-date" type="date"></div>
+      <div class="field"><label>${t('venue')}</label><input id="f-venue" placeholder="Lubumbashi, RDC"></div>
+    </div>
+    <p class="notice">Le compte à rebours reste désactivé tant que la date n’est pas définie.</p>
+  `, 'saveWedding()');
+}
+
+function saveWedding() {
+  const couple = $('#f-couple').value.trim();
+  if (!couple) {
+    showToast('Indiquez les noms du couple');
+    return;
+  }
+  const id = 'w-' + Date.now();
+  const venue = $('#f-venue').value.trim();
+  db.weddings.push({
+    id,
+    couple,
+    date: $('#f-date').value,
+    venue,
+    reception: venue,
+    story: '',
+    photo: '',
+    ceremony: '',
+    mapUrl: '',
+    gpsLat: '',
+    gpsLng: '',
+    musicUrl: '',
+    musicData: '',
+    musicName: '',
+    dressCodes: [],
+    dressCode: '',
+    program: '',
+    websiteNote: '',
+    message: translations[db.lang].welcomeText,
+    tables: [],
+    guests: [],
+    wishes: []
+  });
+  db.selected = id;
+  persist();
+  closeModal();
+  go('weddings');
+}
+
+function openGuestModal() {
+  openModal(t('addGuest'), `
+    <div class="form-grid">
+      <div class="field full"><label>${t('guestName')}</label><input id="f-name" placeholder="Jean & Marie"></div>
+      <div class="field"><label>${t('email')}</label><input id="f-phone" placeholder="+243…"></div>
+      <div class="field"><label>${t('seats')}</label><input id="f-seats" type="number" min="1" max="20" value="1"></div>
+    </div>
+  `, 'saveGuest()');
+}
+
+function saveGuest() {
+  const name = $('#f-name').value.trim();
+  if (!name) {
+    showToast('Indiquez le nom de l’invité');
+    return;
+  }
+  const w = wedding();
+  const n = String(w.guests.length + 1).padStart(4, '0');
+  w.guests.push({
+    id: 'g' + Date.now(),
+    name,
+    phone: $('#f-phone').value.trim(),
+    seats: Math.max(1, Number($('#f-seats').value) || 1),
+    tableId: '',
+    status: 'pending',
+    token: 'NUP-' + new Date().getFullYear() + '-' + n,
+    arrived: false
+  });
+  persist();
+  closeModal();
+  render('guests');
+}
+
+function openTableModal() {
+  openModal(t('addTable'), `
+    <div class="form-grid">
+      <div class="field"><label>${t('tableName')}</label><input id="f-tname" placeholder="Table 04"></div>
+      <div class="field"><label>${t('capacity')}</label><input id="f-cap" type="number" min="1" value="8"></div>
+    </div>
+  `, 'saveTable()');
+}
+
+function saveTable() {
+  const name = $('#f-tname').value.trim();
+  if (!name) {
+    showToast('Donnez un nom à la table');
+    return;
+  }
+  wedding().tables.push({
+    id: 't' + Date.now(),
+    name,
+    capacity: Math.max(1, Number($('#f-cap').value) || 8)
+  });
+  persist();
+  closeModal();
+  render('seating');
+}
+
+function guestLink(wid, token) {
+  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid) + '&invite=' + encodeURIComponent(token);
+  openShare(url);
+}
+
+function publicLink(wid) {
+  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid);
+  openShare(url);
+}
+
+function openShare(url) {
+  openModal(t('invite'), `
+    <div class="field"><label>URL de l’invitation</label><input id="share-url" value="${esc(url)}" readonly></div>
+    <div class="actions" style="margin-top:14px">
+      <button class="btn" onclick="copyShare()">⧉ ${t('copy')}</button>
+      <button class="btn gold" onclick="whatsShare()">◉ ${t('share')}</button>
+    </div>
+  `, 'closeModal()', 'Fermer');
+}
+
+function copyShare() {
+  const v = $('#share-url').value;
+  navigator.clipboard?.writeText(v).then(() => showToast('Lien copié')).catch(() => showToast(v));
+}
+
+function whatsShare() {
+  const v = $('#share-url').value;
+  window.open('https://wa.me/?text=' + encodeURIComponent('Voici votre invitation : ' + v), '_blank');
+}
+
+function renderCountdown(dateStr) {
+  if (!dateStr) return '';
+  const target = new Date(dateStr + 'T12:00:00').getTime();
+  const diff = target - Date.now();
+  if (isNaN(target) || diff <= 0) return '';
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  return `<div style="margin:18px auto;padding:12px 18px;border:1px solid var(--gold2);border-radius:8px;max-width:340px;background:#fbf8f2">
+    <div class="small" style="text-transform:uppercase;letter-spacing:1.5px;color:var(--gold)">${t('countdownLabel')}</div>
+    <div style="font:500 22px 'Playfair Display',serif;margin-top:4px">${days} ${t('days')} · ${hours} ${t('hours')} · ${mins} ${t('mins')}</div>
+  </div>`;
+}
+
+function renderInvite(wid, token) {
+  const w = db.weddings.find(x => x.id === wid);
+  if (!w) {
+    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;
+    return;
+  }
+  const g = token ? w.guests.find(x => x.token === token) : null;
+  if (token && !g) {
+    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1></div></div>`;
+    return;
+  }
+
+  const table = g ? w.tables.find(x => x.id === g.tableId) : null;
+  const mapHref = buildMapLink(w);
+  const dressText = formatDressCode(w);
+  const audioSrc = w.musicData || w.musicUrl;
+
+  $('#app').innerHTML = `<div class="invite-page"><article class="invite-card">
+    <div class="invite-kicker">✧ NUPTIA · ${t('invited')} ✧</div>
+    <div class="invite-title">${esc(w.couple.split('&')[0] || w.couple)}<div class="amp">&</div>${esc(w.couple.split('&')[1] || '')}</div>
+    <div class="invite-rule"></div>
+    <p class="invite-copy">${esc(w.message || t('welcomeText'))}</p>
+    ${w.photo ? `<img class="invite-photo" src="${w.photo}" alt="Photo des mariés">` : ''}
+    ${w.story ? `<div class="invite-extra"><h3>Notre histoire</h3><p>${esc(w.story)}</p></div>` : ''}
+
+    <div class="invite-details">
+      <div class="detail">
+        <strong>${w.date ? new Date(w.date + 'T12:00:00').toLocaleDateString(db.lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : t('datePending')}</strong>
+        <span>${t('dateLabel')}</span>
+      </div>
+      <div class="detail">
+        <strong>${esc(w.venue || 'À préciser')}</strong>
+        <span>${t('placeLabel')}</span>
+      </div>
+    </div>
+
+    ${renderCountdown(w.date)}
+
+    ${(w.ceremony || w.reception || w.program || dressText || w.websiteNote || mapHref) ? `<div class="invite-extra">
+      ${w.ceremony ? `<h3>Cérémonie</h3><p>${esc(w.ceremony)}</p>` : ''}
+      ${w.reception ? `<h3>Réception</h3><p>${esc(w.reception)}</p>` : ''}
+      ${dressText ? `<h3>Dress code</h3><p>${esc(dressText)}</p>` : ''}
+      ${w.program ? `<h3>Programme</h3><p>${esc(w.program)}</p>` : ''}
+      ${w.websiteNote ? `<p>${esc(w.websiteNote)}</p>` : ''}
+      ${mapHref ? `<p><a href="${esc(mapHref)}" target="_blank" rel="noopener">${t('map')}</a></p>` : ''}
+    </div>` : ''}
+
+    ${audioSrc ? `<div class="music-player"><div class="small">♫ Notre musique ${w.musicName ? '— ' + esc(w.musicName) : ''}</div><audio controls preload="metadata" src="${esc(audioSrc)}"></audio></div>` : ''}
+
+    ${g ? `<div class="guest-box">
+      <div class="small">${t('invited')}</div>
+      <strong>${esc(g.name)}</strong>
+      <p class="small">${t('places')} : ${g.seats} · ${t('yourTable')} : ${esc(table?.name || t('notAssigned'))}</p>
+      <div style="margin:8px 0"><span class="pill ${g.status === 'confirmed' ? 'ok' : g.status === 'declined' ? 'no' : ''}">${t(g.status)}</span></div>
+      <div id="qr" class="qr"></div>
+      <div class="small">${t('scan')} : ${esc(g.token)}</div>
+      <div class="actions" style="justify-content:center;margin-top:14px">
+        <button class="btn primary" onclick="guestRsvp('${wid}','${g.token}','confirmed')">${t('rsvp')}</button>
+        <button class="btn" onclick="guestRsvp('${wid}','${g.token}','declined')">${t('declineRsvp')}</button>
+      </div>
+    </div>` : ''}
+
+    <div class="invite-extra">
+      <h3>${t('guestbookTitle')}</h3>
+      <div class="field" style="margin-bottom:8px"><input id="wish-author" value="${g ? esc(g.name) : ''}" placeholder="${t('yourName')}"></div>
+      <div class="field" style="margin-bottom:8px"><textarea id="wish-text" style="min-height:70px" placeholder="${t('yourWish')}"></textarea></div>
+      <button class="btn gold sm" onclick="submitWish('${wid}','${token || ''}')">${t('sendWish')}</button>
+      <div style="margin-top:14px">
+        ${(w.wishes || []).slice().reverse().map(item => `<div class="guestbook-item"><strong>${esc(item.author)}</strong><p style="margin:4px 0 0">${esc(item.text)}</p></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="invite-rule"></div>
+    <div class="small">NUPTIA · Chaque union mérite une belle invitation.</div>
+    <div style="margin-top:16px">
+      <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${wid}','${token || ''}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
+    </div>
+  </article></div>`;
+
+  if (g && window.QRCode) {
+    new QRCode($('#qr'), {
+      text: g.token,
+      width: 112,
+      height: 112,
+      colorDark: '#29251f',
+      colorLight: '#fffdf9',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }
+}
+
+function guestRsvp(wid, token, status) {
+  const w = db.weddings.find(x => x.id === wid);
+  const g = w?.guests.find(x => x.token === token);
+  if (!g) return;
+  g.status = status;
+  persist();
+  showToast(status === 'confirmed' ? t('rsvpDone') : t('rsvpDeclinedDone'));
+  renderInvite(wid, token);
+}
+
+function submitWish(wid, token) {
+  const w = db.weddings.find(x => x.id === wid);
+  if (!w) return;
+  const author = $('#wish-author').value.trim();
+  const text = $('#wish-text').value.trim();
+  if (!author || !text) {
+    showToast('Indiquez votre nom et votre message');
+    return;
+  }
+  w.wishes = w.wishes || [];
+  w.wishes.push({ id: 'wish-' + Date.now(), author, text, createdAt: new Date().toISOString() });
+  persist();
+  showToast(t('wishSent'));
+  renderInvite(wid, token);
+}
+
+function setLang(v) {
+  db.lang = v;
+  persist(true);
+  if (location.search) {
+    const p = new URLSearchParams(location.search);
+    renderInvite(p.get('wedding'), p.get('invite'));
+  } else {
+    render(location.hash.slice(1) || 'overview');
+  }
+}
+
+window.addEventListener('popstate', () => render(location.hash.slice(1) || 'overview'));
+render(location.hash.slice(1) || 'overview');
 </script>
 </body>
 </html>
