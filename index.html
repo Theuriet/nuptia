@@ -1622,6 +1622,15 @@ render(location.hash.slice(1) || 'overview');
   <button id="role-logout-btn" type="button">Déconnexion</button>
   <span id="role-status"></span>
     <div id="invite-view"></div>
+    <div id="supabase-guest-box" data-role="admin">
+  <h3>Ajouter un invité (Supabase)</h3>
+  <input id="sb-guest-name" type="text" placeholder="Nom complet de l'invité" />
+  <input id="sb-guest-phone" type="text" placeholder="Téléphone (optionnel)" />
+  <input id="sb-guest-table" type="text" placeholder="Nom de table (optionnel)" />
+  <button id="sb-add-guest-btn" type="button">Enregistrer dans Supabase</button>
+  <p id="sb-guest-status"></p>
+  <div id="sb-guest-link-box"></div>
+</div>
     <div id="qr-scanner-box" data-role="protocol">
   <button id="start-qr-btn" type="button">Activer caméra QR</button>
   <button id="stop-qr-btn" type="button">Arrêter caméra</button>
