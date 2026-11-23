@@ -17,6 +17,7 @@ import {
   logoutRole,
   applyRolePermissions
 } from "./nuptia-auth.js";
+import { startQrCamera } from "./nuptia-qr.js";
 
 const params = new URLSearchParams(window.location.search);
 const slug = params.get("wedding") || "theuriet-naomi";
