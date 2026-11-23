@@ -125,6 +125,8 @@ tr:last-child td{border-bottom:0}
 .guestbook-item{padding:14px;border:1px solid var(--line);border-radius:8px;background:#fffdf9;margin-bottom:10px;text-align:left}
 .sync-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px}
 .sync-dot.online{background:var(--green)}
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.filter-btn.active{background:var(--ink);color:white;border-color:var(--ink)}
 code.sql{display:block;background:#24201b;color:#f4ede2;padding:12px;border-radius:8px;font-size:11px;overflow:auto;white-space:pre;line-height:1.5;margin-top:8px}
 
 @media(max-width:860px){
@@ -206,7 +208,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Flux Admin -> Protocole + partage & synchronisation Supabase.',
+    adminNote: 'NUPTIA V3 · Rôles + Flux Protocole + Accueil rapide & partage.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -225,15 +227,16 @@ const translations = {
     confirmed: 'Confirmé',
     declined: 'Décliné',
     notAssigned: 'Non attribuée',
-    search: 'Rechercher un invité…',
+    search: 'Rechercher un invité ou un code (NUP-)…',
     seatingTitle: 'Plan visuel de la salle',
     tableName: 'Nom / numéro de table',
     capacity: 'Capacité',
     addTable: 'Ajouter une table',
     tableGuests: 'Invités placés',
-    checkTitle: 'Contrôle des entrées',
-    checkHint: 'Recherchez un invité ou scannez son code pour valider son arrivée.',
+    checkTitle: 'Accueil rapide du jour J',
+    checkHint: 'Filtrez ou recherchez un invité / code pour valider ou annuler son entrée.',
     mark: 'Valider l’entrée',
+    unmark: 'Annuler entrée',
     arrived: 'Arrivé',
     public: 'Invitation publique',
     back: 'Retour au tableau de bord',
@@ -248,7 +251,7 @@ const translations = {
     notFound: 'Invitation introuvable',
     dateLabel: 'Date',
     placeLabel: 'Lieu',
-    noGuests: 'Aucun invité pour le moment.',
+    noGuests: 'Aucun invité correspondant.',
     noTables: 'Aucune table créée.',
     copy: 'Copier le lien',
     share: 'Partager WhatsApp',
@@ -291,7 +294,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Admin -> Protocol flow + Supabase sharing & sync.',
+    adminNote: 'NUPTIA V3 · Roles + Protocol Flow + Fast Check-in & Sharing.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -310,15 +313,16 @@ const translations = {
     confirmed: 'Confirmed',
     declined: 'Declined',
     notAssigned: 'Not assigned',
-    search: 'Search for a guest…',
+    search: 'Search guest name or code (NUP-)…',
     seatingTitle: 'Visual Floor Plan',
     tableName: 'Table name / number',
     capacity: 'Capacity',
     addTable: 'Add a table',
     tableGuests: 'Guests seated',
-    checkTitle: 'Guest check-in',
-    checkHint: 'Search for a guest or code to confirm arrival.',
+    checkTitle: 'Event Day Fast Check-in',
+    checkHint: 'Filter or search a guest/code to check in or undo arrival.',
     mark: 'Check in',
+    unmark: 'Undo arrival',
     arrived: 'Arrived',
     public: 'Public invitation',
     back: 'Back to dashboard',
@@ -333,7 +337,7 @@ const translations = {
     notFound: 'Invitation not found',
     dateLabel: 'Date',
     placeLabel: 'Venue',
-    noGuests: 'No guests yet.',
+    noGuests: 'No matching guests.',
     noTables: 'No tables created.',
     copy: 'Copy link',
     share: 'Share on WhatsApp',
@@ -477,6 +481,8 @@ try {
 
 let supabaseClient = null;
 let currentUser = null;
+let checkinFilter = 'all';
+let shareMeta = { label: '', code: '' };
 
 /* --- POINT 1 : FONCTIONS CENTRALES DE ROLES ET PERMISSIONS --- */
 function isProtocolRole() {
@@ -651,6 +657,7 @@ async function sendWeddingToProtocol(wid) {
   persist(false);
   await syncDirectTablesToSupabase(w.id);
   const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(w.id) + '&role=protocol';
+  shareMeta = { label: `Accès Protocole (${w.couple})`, code: '' };
   openModal('Envoyer / Intégrer au Protocole', `
     <p style="line-height:1.65;margin-top:0">
       Les invités, places, tables et codes de <strong>${esc(w.couple)}</strong> ont été synchronisés pour l’équipe Protocole.
@@ -1322,7 +1329,7 @@ function guestTable(w) {
   if (!w.guests.length) return `<div class="empty">${t('noGuests')}</div>`;
   return `<div class="table-wrap"><table>
     <thead><tr><th>${t('guestName')}</th><th>${t('seats')}</th><th>${t('table')}</th><th>${t('status')}</th><th>Actions</th></tr></thead>
-    <tbody>${w.guests.map(g => `<tr data-name="${esc(g.name.toLowerCase())}">
+    <tbody>${w.guests.map(g => `<tr data-name="${esc((g.name + ' ' + (g.token || '')).toLowerCase())}">
       <td><strong>${esc(g.name)}</strong><div class="small">${esc(g.phone || '')} · ${esc(g.token)}</div></td>
       <td>${g.seats}</td>
       <td>
@@ -1442,9 +1449,15 @@ function removeTable(tid) {
   render('seating');
 }
 
+/* --- POINT 3 : INTERFACE RAPIDE DU JOUR J --- */
 function checkinPage() {
   const w = wedding();
   if (!w) return go(getDefaultPageForRole());
+  const arrivedCount = w.guests.filter(g => g.arrived).length;
+  const arrivedSeats = w.guests.filter(g => g.arrived).reduce((a, g) => a + (Number(g.seats) || 1), 0);
+  const totalSeats = w.guests.reduce((a, g) => a + (Number(g.seats) || 1), 0);
+  const qVal = $('#check-search') ? $('#check-search').value : '';
+
   shell('checkin', `
     <div class="head-row">
       <div>
@@ -1456,35 +1469,72 @@ function checkinPage() {
         <button class="btn" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser les arrivées</button>
       </div>
     </div>
+
+    <div class="cards" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0">
+      <div class="stat"><div class="stat-label">Invités arrivés</div><div class="stat-num">${arrivedCount} / ${w.guests.length}</div></div>
+      <div class="stat"><div class="stat-label">Personnes accueillies</div><div class="stat-num">${arrivedSeats} / ${totalSeats}</div></div>
+      <div class="stat"><div class="stat-label">Restant à accueillir</div><div class="stat-num">${Math.max(0, w.guests.length - arrivedCount)}</div></div>
+    </div>
+
     <section class="panel">
-      <input id="check-search" placeholder="${t('search')}" oninput="drawCheckin(this.value)" style="width:100%;max-width:420px;padding:12px;border:1px solid var(--line);border-radius:6px">
-      <div id="check-results" style="margin-top:18px">${checkRows(w, '')}</div>
+      <input id="check-search" value="${esc(qVal)}" placeholder="${t('search')}" oninput="drawCheckin(this.value)" style="width:100%;max-width:440px;padding:12px;border:1px solid var(--line);border-radius:6px">
+      <div class="filter-bar">
+        <button class="btn sm filter-btn ${checkinFilter === 'all' ? 'active' : ''}" onclick="setCheckinFilter('all')">Tous (${w.guests.length})</button>
+        <button class="btn sm filter-btn ${checkinFilter === 'pending' ? 'active' : ''}" onclick="setCheckinFilter('pending')">À accueillir (${w.guests.length - arrivedCount})</button>
+        <button class="btn sm filter-btn ${checkinFilter === 'arrived' ? 'active' : ''}" onclick="setCheckinFilter('arrived')">Arrivés (${arrivedCount})</button>
+      </div>
+      <div id="check-results" style="margin-top:18px">${checkRows(w, qVal)}</div>
     </section>
   `);
 }
 
+function setCheckinFilter(mode) {
+  checkinFilter = mode;
+  const q = $('#check-search') ? $('#check-search').value : '';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  render('checkin');
+  if (q && $('#check-search')) {
+    $('#check-search').value = q;
+    drawCheckin(q);
+  }
+}
+
 function checkRows(w, q) {
-  const a = w.guests.filter(g => g.name.toLowerCase().includes(q.toLowerCase()) || g.token.toLowerCase().includes(q.toLowerCase()));
-  return a.length ? a.map(g => `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)">
-    <div>
-      <strong>${esc(g.name)}</strong>
-      <div class="small">${esc(g.token)} · ${g.seats} place(s) · ${esc(w.tables.find(tb => tb.id === g.tableId)?.name || t('notAssigned'))}</div>
-    </div>
-    ${g.arrived ? `<span class="pill ok">${t('arrived')}</span>` : `<button class="btn gold" onclick="checkIn('${g.id}')">${t('mark')}</button>`}
-  </div>`).join('') : `<div class="empty">${t('noGuests')}</div>`;
+  const query = (q || '').trim().toLowerCase();
+  const a = w.guests.filter(g => {
+    const matchText = !query || g.name.toLowerCase().includes(query) || g.token.toLowerCase().includes(query);
+    if (!matchText) return false;
+    if (checkinFilter === 'arrived') return Boolean(g.arrived);
+    if (checkinFilter === 'pending') return !g.arrived;
+    return true;
+  });
+  return a.length ? a.map(g => {
+    const tblName = w.tables.find(tb => tb.id === g.tableId)?.name || t('notAssigned');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
+      <div>
+        <strong>${esc(g.name)}</strong> ${g.arrived ? `<span class="pill ok">${t('arrived')}</span>` : ''}
+        <div class="small">${esc(g.token)} · ${g.seats} place(s) · <strong>${esc(tblName)}</strong></div>
+      </div>
+      <div class="actions">
+        ${g.arrived
+          ? `<button class="btn sm" onclick="toggleCheckIn('${g.id}', false)">${t('unmark')}</button>`
+          : `<button class="btn gold" onclick="toggleCheckIn('${g.id}', true)">${t('mark')}</button>`}
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty">${t('noGuests')}</div>`;
 }
 
 function drawCheckin(q) {
   $('#check-results').innerHTML = checkRows(wedding(), q);
 }
 
-function checkIn(id) {
+function toggleCheckIn(id, state) {
   const g = wedding().guests.find(x => x.id === id);
   if (g) {
-    g.arrived = true;
+    g.arrived = Boolean(state);
     persist();
     render('checkin');
-    showToast(t('arrived'));
+    showToast(g.arrived ? t('arrived') : 'Entrée annulée');
   }
 }
 
@@ -1926,12 +1976,17 @@ function saveTable() {
 
 async function guestLink(wid, token) {
   await syncDirectTablesToSupabase(wid, token);
+  const w = db.weddings.find(x => x.id === wid);
+  const g = w?.guests.find(x => x.token === token);
+  shareMeta = { label: g ? g.name : 'Invité', code: token };
   const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid) + '&invite=' + encodeURIComponent(token);
   openShare(url);
 }
 
 async function publicLink(wid) {
   await syncDirectTablesToSupabase(wid);
+  const w = db.weddings.find(x => x.id === wid);
+  shareMeta = { label: w ? w.couple : 'Invitation', code: '' };
   const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid);
   openShare(url);
 }
@@ -1954,7 +2009,10 @@ function copyShare() {
 
 function whatsShare() {
   const v = $('#share-url').value;
-  window.open('https://wa.me/?text=' + encodeURIComponent('Voici votre invitation : ' + v), '_blank');
+  const intro = shareMeta.code
+    ? `Invitation pour ${shareMeta.label} (Code ${shareMeta.code}) : `
+    : 'Voici votre invitation : ';
+  window.open('https://wa.me/?text=' + encodeURIComponent(intro + v), '_blank');
 }
 
 function renderCountdown(dateStr) {
