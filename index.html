@@ -206,7 +206,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Sauvegarde locale + partage & synchronisation Supabase.',
+    adminNote: 'NUPTIA V3 · Droits Admin/Protocole + partage & synchronisation Supabase.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -291,7 +291,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Local backup + Supabase sharing & sync.',
+    adminNote: 'NUPTIA V3 · Admin/Protocol roles + Supabase sharing & sync.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -478,6 +478,84 @@ try {
 let supabaseClient = null;
 let currentUser = null;
 
+/* --- POINT 1 : FONCTIONS CENTRALES DE ROLES ET PERMISSIONS --- */
+function isProtocolRole() {
+  return cloudCfg.role === 'protocol';
+}
+
+function isAdminAuthorized() {
+  return !isProtocolRole() && (Boolean(currentUser) || Boolean(cloudCfg.userEmail) || cloudCfg.role === 'admin');
+}
+
+function canManageWeddings() {
+  return !isProtocolRole();
+}
+
+function canEditSettings() {
+  return !isProtocolRole();
+}
+
+function canAddOrDeleteGuests() {
+  return !isProtocolRole();
+}
+
+function canManageTables() {
+  return !isProtocolRole();
+}
+
+function canAccessPage(page) {
+  const protocolAllowed = ['guests', 'seating', 'checkin'];
+  if (isProtocolRole()) {
+    return protocolAllowed.includes(page);
+  }
+  return ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'].includes(page);
+}
+
+function getDefaultPageForRole() {
+  return isProtocolRole() ? 'checkin' : 'overview';
+}
+
+function mergeCloudWorkspace(remoteDb) {
+  if (!remoteDb || !Array.isArray(remoteDb.weddings)) return db;
+  const localMap = new Map((db.weddings || []).map(w => [w.id, w]));
+  const mergedWeddings = remoteDb.weddings.map(rw => {
+    const lw = localMap.get(rw.id);
+    if (!lw) return rw;
+    const localGuests = new Map((lw.guests || []).map(g => [g.token, g]));
+    const mergedGuests = (rw.guests || []).map(rg => {
+      const lg = localGuests.get(rg.token);
+      if (!lg) return rg;
+      return {
+        ...rg,
+        arrived: Boolean(rg.arrived || lg.arrived),
+        status: rg.status !== 'pending' ? rg.status : lg.status,
+        tableId: rg.tableId || lg.tableId || ''
+      };
+    });
+    (lw.guests || []).forEach(lg => {
+      if (!mergedGuests.some(g => g.token === lg.token)) {
+        mergedGuests.push(lg);
+      }
+    });
+    return {
+      ...rw,
+      guests: mergedGuests,
+      tables: (rw.tables && rw.tables.length) ? rw.tables : (lw.tables || []),
+      wishes: (rw.wishes && rw.wishes.length) ? rw.wishes : (lw.wishes || [])
+    };
+  });
+  (db.weddings || []).forEach(lw => {
+    if (!mergedWeddings.some(w => w.id === lw.id)) {
+      mergedWeddings.push(lw);
+    }
+  });
+  return {
+    ...db,
+    ...remoteDb,
+    weddings: mergedWeddings
+  };
+}
+
 function getDirectClient() {
   try {
     const url = (cloudCfg.url || SB_PUBLIC_URL || '').trim();
@@ -487,10 +565,6 @@ function getDirectClient() {
   } catch (e) {
     return null;
   }
-}
-
-function isAdminAuthorized() {
-  return Boolean(currentUser) || (cloudCfg.role === 'admin' && Boolean(cloudCfg.userEmail));
 }
 
 function initSupabase() {
@@ -558,6 +632,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
             full_name: g.name,
             phone: g.phone || '',
             seats: g.seats || 1,
+            table_id: g.tableId || '',
             qr_token: g.token,
             rsvp_status: g.status || 'pending',
             arrived: Boolean(g.arrived)
@@ -578,7 +653,7 @@ function persist(skipCloud) {
   }
   if (!skipCloud) {
     syncDirectTablesToSupabase();
-    if (supabaseClient && currentUser) {
+    if (supabaseClient && currentUser && canManageWeddings()) {
       pushToCloud();
     }
   }
@@ -603,8 +678,9 @@ function showToast(msg) {
 }
 
 function go(page) {
-  history.pushState({ page }, '', `#${page}`);
-  render(page);
+  const safePage = canAccessPage(page) ? page : getDefaultPageForRole();
+  history.pushState({ page: safePage }, '', `#${safePage}`);
+  render(safePage);
 }
 
 function buildMapLink(w) {
@@ -625,18 +701,19 @@ function formatDressCode(w) {
 
 function header() {
   const isOnline = Boolean(getDirectClient());
+  const roleBadge = isProtocolRole() ? 'Protocole' : 'Admin';
   return `<header class="topbar">
     <div class="brand">
       <div class="brand-mark">N</div>
       <div>
         <div class="brand-name">NUPTIA</div>
-        <div class="brand-sub">Wedding experiences · V3</div>
+        <div class="brand-sub">Wedding experiences · V3 (${roleBadge})</div>
       </div>
     </div>
     <div class="top-actions">
-      <button class="btn ghost sm" onclick="go('sync')" title="Synchronisation">
+      ${!isProtocolRole() ? `<button class="btn ghost sm" onclick="go('sync')" title="Synchronisation">
         <span class="sync-dot ${isOnline ? 'online' : ''}"></span>${isOnline ? 'Supabase OK' : 'Local'}
-      </button>
+      </button>` : `<button class="btn ghost sm" onclick="openAdminAuthModal()">${roleBadge}</button>`}
       <select class="lang" onchange="setLang(this.value)">
         <option value="fr" ${db.lang === 'fr' ? 'selected' : ''}>FR</option>
         <option value="en" ${db.lang === 'en' ? 'selected' : ''}>EN</option>
@@ -646,24 +723,26 @@ function header() {
 }
 
 function bottomAuthBar() {
-  const roleLabel = currentUser
-    ? `Admin connecté (${esc(currentUser.email || '')})`
-    : (cloudCfg.role === 'protocol' ? 'Mode Protocole' : (cloudCfg.userEmail ? `Admin (${esc(cloudCfg.userEmail)})` : 'Accès Admin / Protocole'));
+  const roleLabel = isProtocolRole()
+    ? 'Mode Protocole actif (Accueil, Placement & Invités)'
+    : (currentUser
+        ? `Admin connecté (${esc(currentUser.email || '')})`
+        : (cloudCfg.userEmail ? `Admin (${esc(cloudCfg.userEmail)})` : 'Accès Admin / Protocole'));
   return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <div>
-      <div class="small">Autorisation & Protocole</div>
+      <div class="small">Autorisation & Rôle actif</div>
       <strong style="font-size:13px">${roleLabel}</strong>
     </div>
     <div class="actions">
-      <button class="btn sm" onclick="openAdminAuthModal()">Autorisation Admin</button>
-      <button class="btn sm" onclick="go('sync')">Protocole & Sync</button>
+      <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle / Autoriser</button>
+      ${!isProtocolRole() ? `<button class="btn sm" onclick="go('sync')">Protocole & Sync</button>` : ''}
     </div>
   </div>`;
 }
 
 function shell(page, content) {
   const w = wedding();
-  const navItems = [
+  const allNav = [
     ['overview', '⌂'],
     ['weddings', '♡'],
     ['settings', '✧'],
@@ -674,11 +753,13 @@ function shell(page, content) {
     ['guestbook', '✎'],
     ['sync', '☁']
   ];
+  const visibleNav = allNav.filter(([k]) => canAccessPage(k));
+
   $('#app').innerHTML = header() + `<div class="layout">
     <aside class="sidebar">
-      <div class="side-label">Espace actif</div>
+      <div class="side-label">Espace actif · ${isProtocolRole() ? 'Protocole' : 'Admin'}</div>
       ${w ? `<div class="active-wedding-badge"><span class="small">Mariage sélectionné</span><strong>${esc(w.couple)}</strong></div>` : ''}
-      ${navItems.map(([k, i]) => `<button class="nav ${page === k ? 'active' : ''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}
+      ${visibleNav.map(([k, i]) => `<button class="nav ${page === k ? 'active' : ''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}
     </aside>
     <main class="main">${content}${bottomAuthBar()}<div class="footer">${t('adminNote')}</div></main>
   </div>`;
@@ -690,8 +771,8 @@ function openAdminAuthModal() {
       <div class="field full">
         <label>Rôle actif</label>
         <select id="auth-role">
-          <option value="admin" ${cloudCfg.role !== 'protocol' ? 'selected' : ''}>Administrateur</option>
-          <option value="protocol" ${cloudCfg.role === 'protocol' ? 'selected' : ''}>Protocole / Accueil</option>
+          <option value="admin" ${!isProtocolRole() ? 'selected' : ''}>Administrateur (Contrôle complet)</option>
+          <option value="protocol" ${isProtocolRole() ? 'selected' : ''}>Protocole / Accueil (Terrain jour J)</option>
         </select>
       </div>
       <div class="field full">
@@ -703,7 +784,7 @@ function openAdminAuthModal() {
         <input id="auth-pass" type="password" placeholder="••••••••">
       </div>
     </div>
-  `, 'applyAdminAuthFromModal()', 'Valider l’autorisation');
+  `, 'applyAdminAuthFromModal()', 'Valider le rôle');
 }
 
 async function applyAdminAuthFromModal() {
@@ -715,41 +796,40 @@ async function applyAdminAuthFromModal() {
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
   initSupabase();
 
-  if (supabaseClient && email && pass) {
+  if (role === 'admin' && supabaseClient && email && pass) {
     try {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
       if (!error && data?.user) {
         currentUser = data.user;
-        showToast('Session administrateur Supabase active');
       }
     } catch (e) {}
-  } else {
-    showToast(`Rôle ${role === 'protocol' ? 'Protocole' : 'Administrateur'} enregistré`);
   }
+
+  showToast(`Rôle ${role === 'protocol' ? 'Protocole' : 'Administrateur'} activé`);
   closeModal();
-  render(location.hash.slice(1) || 'overview');
+  const currentHash = location.hash.slice(1) || getDefaultPageForRole();
+  go(canAccessPage(currentHash) ? currentHash : getDefaultPageForRole());
 }
 
-function render(page = 'overview') {
+function render(page) {
   try {
     const params = new URLSearchParams(location.search);
     if (params.has('wedding')) {
       renderInvite(params.get('wedding'), params.get('invite'));
       return;
     }
-    const valid = ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'];
-    if (!valid.includes(page)) page = 'overview';
-    if (page === 'overview') return dashboard();
-    if (page === 'weddings') return weddingsPage();
-    if (page === 'settings') return settingsPage();
-    if (page === 'guests') return guestsPage();
-    if (page === 'seating') return seatingPage();
-    if (page === 'checkin') return checkinPage();
-    if (page === 'stats') return statsPage();
-    if (page === 'guestbook') return guestbookPage();
-    if (page === 'sync') return syncPage();
+    const targetPage = canAccessPage(page) ? page : getDefaultPageForRole();
+    if (targetPage === 'overview') return dashboard();
+    if (targetPage === 'weddings') return weddingsPage();
+    if (targetPage === 'settings') return settingsPage();
+    if (targetPage === 'guests') return guestsPage();
+    if (targetPage === 'seating') return seatingPage();
+    if (targetPage === 'checkin') return checkinPage();
+    if (targetPage === 'stats') return statsPage();
+    if (targetPage === 'guestbook') return guestbookPage();
+    if (targetPage === 'sync') return syncPage();
   } catch (e) {
-    dashboard();
+    render(getDefaultPageForRole());
   }
 }
 
@@ -763,7 +843,7 @@ function dashboard() {
         <h1 class="page-title">${t('welcome')}</h1>
         <div class="sub">${t('hello')}</div>
       </div>
-      <button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>
+      ${canManageWeddings() ? `<button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>` : ''}
     </div>
     <div class="cards">
       <div class="stat"><div class="stat-label">${t('active')}</div><div class="stat-num">${db.weddings.length}</div></div>
@@ -795,10 +875,10 @@ function weddingCards() {
         <h3>${esc(w.couple)}</h3>
         <div class="meta">${w.date ? esc(w.date) : t('datePending')} · ${esc(w.venue || '')} · ${(w.guests || []).length} invité(s)</div>
         <div class="actions">
-          <button class="btn primary sm" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button>
+          ${canEditSettings() ? `<button class="btn primary sm" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button>` : ''}
           <button class="btn sm" onclick="selectWedding('${w.id}');go('guests')">${t('open')}</button>
           <button class="btn sm" onclick="publicLink('${w.id}')">${t('view')}</button>
-          <button class="btn danger sm" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>
+          ${canManageWeddings() ? `<button class="btn danger sm" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>` : ''}
         </div>
       </div>
     </article>`;
@@ -813,7 +893,7 @@ function weddingsPage() {
         <h1 class="page-title">${t('weddings')}</h1>
         <div class="sub">Créez, gérez ou supprimez en toute sécurité un espace distinct pour chaque couple.</div>
       </div>
-      <button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>
+      ${canManageWeddings() ? `<button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>` : ''}
     </div>
     ${weddingCards()}
   `);
@@ -825,6 +905,7 @@ function selectWedding(id) {
 }
 
 function confirmDeleteWedding(id) {
+  if (!canManageWeddings()) return showToast('Action réservée à l’administrateur');
   const target = db.weddings.find(w => w.id === id);
   if (!target) return;
   openModal(
@@ -840,6 +921,7 @@ function confirmDeleteWedding(id) {
 }
 
 function deleteWedding(id) {
+  if (!canManageWeddings()) return;
   db.weddings = db.weddings.filter(w => w.id !== id);
   if (db.selected === id) {
     db.selected = db.weddings[0]?.id || null;
@@ -851,6 +933,7 @@ function deleteWedding(id) {
 }
 
 function settingsPage() {
+  if (!canEditSettings()) return go('checkin');
   const w = wedding();
   if (!w) {
     shell('settings', `<div class="empty">Créez d'abord un espace de mariage pour le personnaliser.</div>`);
@@ -1020,6 +1103,7 @@ function removeWeddingMusic() {
 }
 
 function saveWeddingDetails() {
+  if (!canEditSettings()) return showToast('Action réservée à l’administrateur');
   const w = wedding();
   w.couple = $('#ed-couple').value.trim() || w.couple;
   w.date = $('#ed-date').value;
@@ -1053,17 +1137,17 @@ function saveWeddingDetails() {
 
 function guestsPage() {
   const w = wedding();
-  if (!w) return go('weddings');
+  if (!w) return go(getDefaultPageForRole());
   shell('guests', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / GUESTS</div>
+        <div class="eyebrow">${esc(w.couple)} / GUESTS · ${isProtocolRole() ? 'PROTOCOLE' : 'ADMIN'}</div>
         <h1 class="page-title">${t('guestTitle')}</h1>
         <div class="sub">${w.guests.length} invité(s) · ${w.guests.reduce((a, g) => a + g.seats, 0)} place(s)</div>
       </div>
       <div class="actions">
-        <button class="btn" onclick="exportGuestsCsv()">⤓ ${t('exportCsv')}</button>
-        <button class="btn primary" onclick="openGuestModal()">＋ ${t('addGuest')}</button>
+        ${!isProtocolRole() ? `<button class="btn" onclick="exportGuestsCsv()">⤓ ${t('exportCsv')}</button>` : ''}
+        ${canAddOrDeleteGuests() ? `<button class="btn primary" onclick="openGuestModal()">＋ ${t('addGuest')}</button>` : ''}
       </div>
     </div>
     <section class="panel">
@@ -1097,8 +1181,8 @@ function guestTable(w) {
         </select>
       </td>
       <td class="actions">
-        <button class="btn sm" onclick="guestLink('${w.id}','${g.token}')" title="Partager">↗</button>
-        <button class="btn danger sm" onclick="removeGuest('${g.id}')" title="Supprimer">✕</button>
+        ${!isProtocolRole() ? `<button class="btn sm" onclick="guestLink('${w.id}','${g.token}')" title="Partager">↗</button>` : ''}
+        ${canAddOrDeleteGuests() ? `<button class="btn danger sm" onclick="removeGuest('${g.id}')" title="Supprimer">✕</button>` : `<span class="pill ${g.arrived ? 'ok' : ''}">${g.arrived ? t('arrived') : 'En attente'}</span>`}
       </td>
     </tr>`).join('')}</tbody>
   </table></div>`;
@@ -1114,6 +1198,7 @@ function changeGuestStatus(gid, status) {
 }
 
 function removeGuest(gid) {
+  if (!canAddOrDeleteGuests()) return showToast('Suppression réservée à l’administrateur');
   const w = wedding();
   w.guests = w.guests.filter(g => g.id !== gid);
   persist();
@@ -1145,16 +1230,16 @@ function assignTable(gid, tid) {
 
 function seatingPage() {
   const w = wedding();
-  if (!w) return go('weddings');
+  if (!w) return go(getDefaultPageForRole());
   const unassigned = w.guests.filter(g => !g.tableId);
   shell('seating', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / FLOOR PLAN</div>
+        <div class="eyebrow">${esc(w.couple)} / FLOOR PLAN · ${isProtocolRole() ? 'PROTOCOLE' : 'ADMIN'}</div>
         <h1 class="page-title">${t('seatingTitle')}</h1>
         <div class="sub">Visualisez la disposition de la salle, la capacité de chaque table et les invités non encore placés.</div>
       </div>
-      <button class="btn primary" onclick="openTableModal()">＋ ${t('addTable')}</button>
+      ${canManageTables() ? `<button class="btn primary" onclick="openTableModal()">＋ ${t('addTable')}</button>` : ''}
     </div>
 
     <div class="floor-plan">
@@ -1173,9 +1258,9 @@ function seatingPage() {
             <div style="text-align:left;border-top:1px solid var(--line);padding-top:8px;min-height:48px">
               ${list.length ? list.map(g => `<div class="small" style="color:var(--ink);margin:4px 0">• ${esc(g.name)} (${g.seats})</div>`).join('') : `<div class="small">Table libre</div>`}
             </div>
-            <div style="margin-top:10px;display:flex;justify-content:center;gap:6px">
+            ${canManageTables() ? `<div style="margin-top:10px;display:flex;justify-content:center;gap:6px">
               <button class="btn danger sm" onclick="removeTable('${tb.id}')">Supprimer</button>
-            </div>
+            </div>` : ''}
           </div>`;
         }).join('')}
       </div>` : `<div class="empty">${t('noTables')}</div>`}
@@ -1191,6 +1276,7 @@ function seatingPage() {
 }
 
 function removeTable(tid) {
+  if (!canManageTables()) return showToast('Action réservée à l’administrateur');
   const w = wedding();
   w.tables = w.tables.filter(tb => tb.id !== tid);
   w.guests.forEach(g => { if (g.tableId === tid) g.tableId = ''; });
@@ -1200,11 +1286,11 @@ function removeTable(tid) {
 
 function checkinPage() {
   const w = wedding();
-  if (!w) return go('weddings');
+  if (!w) return go(getDefaultPageForRole());
   shell('checkin', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / ARRIVALS</div>
+        <div class="eyebrow">${esc(w.couple)} / ARRIVALS · ${isProtocolRole() ? 'PROTOCOLE' : 'ADMIN'}</div>
         <h1 class="page-title">${t('checkTitle')}</h1>
         <div class="sub">${t('checkHint')}</div>
       </div>
@@ -1242,6 +1328,7 @@ function checkIn(id) {
 }
 
 function statsPage() {
+  if (isProtocolRole()) return go('checkin');
   const w = wedding();
   if (!w) return go('weddings');
   const gs = w.guests || [];
@@ -1289,6 +1376,7 @@ function statsPage() {
 }
 
 function exportGuestsCsv() {
+  if (isProtocolRole()) return showToast('Export réservé à l’administrateur');
   const w = wedding();
   if (!w) return;
   const rows = [['Nom', 'Telephone', 'Places', 'Table', 'Statut', 'Code', 'Arrive']];
@@ -1306,6 +1394,7 @@ function exportGuestsCsv() {
 }
 
 function guestbookPage() {
+  if (isProtocolRole()) return go('checkin');
   const w = wedding();
   if (!w) return go('weddings');
   const wishes = w.wishes || [];
@@ -1332,6 +1421,7 @@ function guestbookPage() {
 }
 
 function deleteWish(wid) {
+  if (isProtocolRole()) return;
   const w = wedding();
   w.wishes = (w.wishes || []).filter(x => x.id !== wid);
   persist();
@@ -1339,6 +1429,7 @@ function deleteWish(wid) {
 }
 
 function syncPage() {
+  if (isProtocolRole()) return go('checkin');
   shell('sync', `
     <div class="head-row">
       <div>
@@ -1366,8 +1457,8 @@ function syncPage() {
         <div class="field">
           <label>Rôle</label>
           <select id="sb-role">
-            <option value="admin" ${cloudCfg.role !== 'protocol' ? 'selected' : ''}>Administrateur</option>
-            <option value="protocol" ${cloudCfg.role === 'protocol' ? 'selected' : ''}>Protocole</option>
+            <option value="admin" ${!isProtocolRole() ? 'selected' : ''}>Administrateur</option>
+            <option value="protocol" ${isProtocolRole() ? 'selected' : ''}>Protocole</option>
           </select>
         </div>
         <div class="field"><label>E-mail administrateur</label><input id="sb-email" type="email" value="${esc(cloudCfg.userEmail)}" placeholder="admin@exemple.com"></div>
@@ -1426,6 +1517,12 @@ async function signInAdmin() {
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
   initSupabase();
   const password = $('#sb-pass').value;
+
+  if (cloudCfg.role === 'protocol') {
+    showToast('Rôle Protocole activé');
+    go('checkin');
+    return;
+  }
 
   if (supabaseClient && cloudCfg.userEmail && password) {
     try {
@@ -1497,9 +1594,9 @@ async function syncFromCloud(silent) {
       return;
     }
     if (data && data.payload && Array.isArray(data.payload.weddings)) {
-      db = data.payload;
+      db = mergeCloudWorkspace(data.payload);
       persist(true);
-      if (!silent) showToast('Données récupérées depuis le cloud !');
+      if (!silent) showToast('Données fusionnées et récupérées depuis le cloud !');
     } else {
       await pushToCloud(false);
     }
@@ -1523,10 +1620,10 @@ function restoreBackup(input) {
     try {
       const parsed = JSON.parse(reader.result);
       if (!Array.isArray(parsed.weddings)) throw new Error('Format invalide');
-      db = parsed;
+      db = mergeCloudWorkspace(parsed);
       persist();
       showToast('Sauvegarde restaurée avec succès');
-      render('overview');
+      render(getDefaultPageForRole());
     } catch (e) {
       showToast('Fichier de sauvegarde invalide');
     }
@@ -1552,6 +1649,7 @@ function closeModal() {
 }
 
 function openWeddingModal() {
+  if (!canManageWeddings()) return showToast('Action réservée à l’administrateur');
   openModal(t('createTitle'), `
     <div class="form-grid">
       <div class="field full"><label>${t('couple')}</label><input id="f-couple" placeholder="Ex. Theuriet & Naomi"></div>
@@ -1563,6 +1661,7 @@ function openWeddingModal() {
 }
 
 function saveWedding() {
+  if (!canManageWeddings()) return;
   const couple = $('#f-couple').value.trim();
   if (!couple) {
     showToast('Indiquez les noms du couple');
@@ -1601,6 +1700,7 @@ function saveWedding() {
 }
 
 function openGuestModal() {
+  if (!canAddOrDeleteGuests()) return showToast('Action réservée à l’administrateur');
   openModal(t('addGuest'), `
     <div class="form-grid">
       <div class="field full"><label>${t('guestName')}</label><input id="f-name" placeholder="Jean & Marie"></div>
@@ -1611,6 +1711,7 @@ function openGuestModal() {
 }
 
 function saveGuest() {
+  if (!canAddOrDeleteGuests()) return;
   const name = $('#f-name').value.trim();
   if (!name) {
     showToast('Indiquez le nom de l’invité');
@@ -1634,6 +1735,7 @@ function saveGuest() {
 }
 
 function openTableModal() {
+  if (!canManageTables()) return showToast('Action réservée à l’administrateur');
   openModal(t('addTable'), `
     <div class="form-grid">
       <div class="field"><label>${t('tableName')}</label><input id="f-tname" placeholder="Table 04"></div>
@@ -1643,6 +1745,7 @@ function openTableModal() {
 }
 
 function saveTable() {
+  if (!canManageTables()) return;
   const name = $('#f-tname').value.trim();
   if (!name) {
     showToast('Donnez un nom à la table');
@@ -1915,13 +2018,18 @@ function setLang(v) {
     const p = new URLSearchParams(location.search);
     renderInvite(p.get('wedding'), p.get('invite'));
   } else {
-    render(location.hash.slice(1) || 'overview');
+    const page = location.hash.slice(1) || getDefaultPageForRole();
+    render(canAccessPage(page) ? page : getDefaultPageForRole());
   }
 }
 
-window.addEventListener('popstate', () => render(location.hash.slice(1) || 'overview'));
+window.addEventListener('popstate', () => {
+  const page = location.hash.slice(1) || getDefaultPageForRole();
+  render(canAccessPage(page) ? page : getDefaultPageForRole());
+});
 syncDirectTablesToSupabase();
-render(location.hash.slice(1) || 'overview');
+const initialPage = location.hash.slice(1) || getDefaultPageForRole();
+render(canAccessPage(initialPage) ? initialPage : getDefaultPageForRole());
 </script>
 </body>
 </html>
