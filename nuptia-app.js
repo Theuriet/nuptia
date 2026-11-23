@@ -67,6 +67,7 @@ async function init() {
 
   let state = await loadWeddingWorkspace(slug);
   renderWorkspace(state);
+    setupQrControls(state);
 
   subscribeToWeddingUpdates(state.wedding.id, async () => {
     state = await loadWeddingWorkspace(slug);
