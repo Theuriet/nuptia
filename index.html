@@ -151,6 +151,7 @@ code.sql{display:block;background:#24201b;color:#f4ede2;padding:12px;border-radi
   .invite-details{gap:16px}
 }
 </style>
+</style>
 </head>
 <body>
 <div id="app" class="app"></div>
@@ -206,7 +207,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Sauvegarde locale + synchronisation Supabase directe.',
+    adminNote: 'NUPTIA V3 · Sauvegarde locale + synchronisation Supabase.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -291,7 +292,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Local backup + direct Supabase sync.',
+    adminNote: 'NUPTIA V3 · Local backup + Supabase sync.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -356,6 +357,37 @@ const translations = {
     exportCsv: 'Export list (CSV)'
   }
 };
+
+const SQL_PROTOCOL = `create table if not exists public.weddings (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  couple_names text not null,
+  wedding_date text,
+  venue text,
+  ceremony text,
+  reception text,
+  message text,
+  story text,
+  map_url text,
+  gps_lat text,
+  gps_lng text,
+  music_url text,
+  dress_code text,
+  program text,
+  website_note text
+);
+
+create table if not exists public.guests (
+  id uuid primary key default gen_random_uuid(),
+  wedding_id uuid references public.weddings(id) on delete cascade,
+  full_name text not null,
+  phone text,
+  seats int default 1,
+  table_id text,
+  qr_token text unique not null,
+  rsvp_status text default 'pending',
+  arrived boolean default false
+);`;
 
 function initial() {
   return {
@@ -1229,12 +1261,12 @@ function syncPage() {
       <div>
         <div class="eyebrow">NUPTIA / CLOUD & BACKUP</div>
         <h1 class="page-title">Synchronisation & Sécurité</h1>
-        <div class="sub">Vos invités et mariages sont synchronisés directement avec Supabase pour s'ouvrir sur tous les téléphones.</div>
+        <div class="sub">Connexion Supabase, authentification administrateur et protocole SQL.</div>
       </div>
     </div>
 
     <section class="panel">
-      <h3>1. Connexion Supabase directe</h3>
+      <h3>1. Connexion Supabase</h3>
       <div class="form-grid" style="margin-top:12px">
         <div class="field"><label>URL du projet Supabase</label><input id="sb-url" value="${esc(cloudCfg.url)}" placeholder="https://xxxxx.supabase.co"></div>
         <div class="field"><label>Clé publique (anon key)</label><input id="sb-key" value="${esc(cloudCfg.anonKey)}" placeholder="sb_publishable_..."></div>
@@ -1245,7 +1277,32 @@ function syncPage() {
     </section>
 
     <section class="panel">
-      <h3>2. Sauvegarde et restauration manuelle (Fichier JSON)</h3>
+      <h3>2. Connexion compte administrateur</h3>
+      <div class="section-note">Connectez-vous avec votre e-mail et mot de passe administrateur Supabase pour synchroniser l’espace complet.</div>
+      <div class="form-grid" style="margin-top:12px">
+        <div class="field"><label>E-mail administrateur</label><input id="sb-email" type="email" value="${esc(cloudCfg.userEmail)}" placeholder="admin@exemple.com"></div>
+        <div class="field"><label>Mot de passe</label><input id="sb-pass" type="password" placeholder="••••••••"></div>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn gold" onclick="signInAdmin()">Se connecter</button>
+        <button class="btn" onclick="pushToCloud(true)">Envoyer vers le cloud</button>
+        <button class="btn" onclick="syncFromCloud(false)">Récupérer depuis le cloud</button>
+        ${currentUser ? `<button class="btn danger" onclick="signOutAdmin()">Déconnexion</button>` : ''}
+      </div>
+      <div class="small" style="margin-top:10px">État session : <strong>${currentUser ? esc(currentUser.email || 'Connecté') : 'Non connecté'}</strong></div>
+    </section>
+
+    <section class="panel">
+      <h3>3. Protocole SQL (Tables Supabase)</h3>
+      <div class="section-note">À exécuter dans l’éditeur SQL de Supabase si les tables n’existent pas encore.</div>
+      <code class="sql">${esc(SQL_PROTOCOL)}</code>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn sm" onclick="copySqlProtocol()">Copier le protocole SQL</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>4. Sauvegarde et restauration manuelle (Fichier JSON)</h3>
       <div class="section-note">Téléchargez une sauvegarde complète de tous vos mariages ou restaurez-la sur un autre téléphone.</div>
       <div class="actions" style="margin-top:12px">
         <button class="btn" onclick="downloadBackup()">⤓ Télécharger la sauvegarde (.json)</button>
@@ -1255,18 +1312,63 @@ function syncPage() {
   `);
 }
 
+function copySqlProtocol() {
+  navigator.clipboard?.writeText(SQL_PROTOCOL).then(() => showToast('Protocole SQL copié')).catch(() => showToast('Copie impossible'));
+}
+
 async function saveSupabaseConfig() {
   cloudCfg.url = $('#sb-url').value.trim();
   cloudCfg.anonKey = $('#sb-key').value.trim();
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
   initSupabase();
   await syncDirectTablesToSupabase();
-  showToast('Configuration enregistrée et invités envoyés sur Supabase !');
+  showToast('Configuration enregistrée et synchronisation lancée');
+  render('sync');
+}
+
+async function signInAdmin() {
+  cloudCfg.url = $('#sb-url').value.trim();
+  cloudCfg.anonKey = $('#sb-key').value.trim();
+  cloudCfg.userEmail = $('#sb-email').value.trim();
+  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  initSupabase();
+  const password = $('#sb-pass').value;
+  if (!supabaseClient || !cloudCfg.userEmail || !password) {
+    showToast('Renseignez l’URL, la clé, l’e-mail et le mot de passe');
+    return;
+  }
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: cloudCfg.userEmail,
+      password
+    });
+    if (error) {
+      showToast('Connexion impossible : ' + error.message);
+      return;
+    }
+    currentUser = data?.user || null;
+    showToast('Connecté en tant qu’administrateur');
+    await syncFromCloud(true);
+    render('sync');
+  } catch (e) {
+    showToast('Erreur de connexion');
+  }
+}
+
+async function signOutAdmin() {
+  try {
+    if (supabaseClient?.auth) await supabaseClient.auth.signOut();
+  } catch (e) {}
+  currentUser = null;
+  showToast('Déconnecté');
   render('sync');
 }
 
 async function pushToCloud(manual) {
-  if (!supabaseClient || !currentUser) return;
+  if (!supabaseClient || !currentUser) {
+    if (manual) showToast('Connectez-vous d’abord en administrateur');
+    return;
+  }
   try {
     const { error } = await supabaseClient.from('nuptia_workspaces').upsert({
       user_id: currentUser.id,
@@ -1275,11 +1377,16 @@ async function pushToCloud(manual) {
     });
     if (error && manual) showToast('Erreur sync : ' + error.message);
     else if (manual) showToast('Données synchronisées vers le cloud !');
-  } catch (e) {}
+  } catch (e) {
+    if (manual) showToast('Erreur lors de l’envoi');
+  }
 }
 
 async function syncFromCloud(silent) {
-  if (!supabaseClient || !currentUser) return;
+  if (!supabaseClient || !currentUser) {
+    if (!silent) showToast('Connectez-vous d’abord en administrateur');
+    return;
+  }
   try {
     const { data, error } = await supabaseClient.from('nuptia_workspaces').select('payload').eq('user_id', currentUser.id).maybeSingle();
     if (error) {
