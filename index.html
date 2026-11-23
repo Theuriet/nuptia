@@ -1621,5 +1621,11 @@ render(location.hash.slice(1) || 'overview');
   <button id="role-login-btn" type="button">Valider</button>
   <button id="role-logout-btn" type="button">Déconnexion</button>
   <span id="role-status"></span>
+    <div id="qr-scanner-box" data-role="protocol">
+  <button id="start-qr-btn" type="button">Activer caméra QR</button>
+  <button id="stop-qr-btn" type="button">Arrêter caméra</button>
+  <video id="qr-video" playsinline style="width: 100%; max-width: 360px; display: none;"></video>
+  <p id="qr-scan-result"></p>
+</div>
 </div>
 </html>
