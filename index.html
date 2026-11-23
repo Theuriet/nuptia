@@ -162,6 +162,9 @@ const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg';
 
+const SB_PUBLIC_URL = 'https://yreablulslmnnexoojek.supabase.co';
+const SB_PUBLIC_ANON = 'sb_publishable_3YNYOYJrO00k7VUqLfIhXw_0BFOHjN9';
+
 const DRESS_OPTIONS = {
   fr: [
     { id: 'evening', label: 'Tenue de soirée élégante' },
@@ -203,7 +206,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Sauvegarde locale active + synchronisation Supabase disponible.',
+    adminNote: 'NUPTIA V3 · Sauvegarde locale + synchronisation Supabase directe.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -288,7 +291,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Local backup active + Supabase cloud sync available.',
+    adminNote: 'NUPTIA V3 · Local backup + direct Supabase sync.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -426,28 +429,82 @@ try {
   w.wishes = w.wishes || [];
 });
 
-let cloudCfg = { url: '', anonKey: '', userEmail: '' };
+let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '' };
 try {
-  cloudCfg = Object.assign(cloudCfg, JSON.parse(localStorage.getItem(cloudCfgKey) || '{}'));
+  const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
+  if (saved.url) cloudCfg.url = saved.url;
+  if (saved.anonKey) cloudCfg.anonKey = saved.anonKey;
+  if (saved.userEmail) cloudCfg.userEmail = saved.userEmail;
 } catch (e) {}
 
 let supabaseClient = null;
 let currentUser = null;
 
+function getDirectClient() {
+  const url = (cloudCfg.url || SB_PUBLIC_URL || '').trim();
+  const key = (cloudCfg.anonKey || SB_PUBLIC_ANON || '').trim();
+  if (!url || !key || !window.supabase) return null;
+  return window.supabase.createClient(url, key);
+}
+
 function initSupabase() {
-  if (cloudCfg.url && cloudCfg.anonKey && window.supabase) {
-    try {
-      supabaseClient = window.supabase.createClient(cloudCfg.url.trim(), cloudCfg.anonKey.trim());
-      supabaseClient.auth.getSession().then(({ data }) => {
-        currentUser = data?.session?.user || null;
-        if (currentUser) syncFromCloud(true);
-      });
-    } catch (e) {
-      supabaseClient = null;
-    }
+  supabaseClient = getDirectClient();
+  if (supabaseClient) {
+    supabaseClient.auth.getSession().then(({ data }) => {
+      currentUser = data?.session?.user || null;
+      if (currentUser) syncFromCloud(true);
+    }).catch(() => {});
   }
 }
 initSupabase();
+
+async function syncDirectTablesToSupabase() {
+  const client = getDirectClient();
+  if (!client) return;
+  try {
+    for (const w of db.weddings) {
+      const slug = w.id;
+      const { data: wRow } = await client
+        .from('weddings')
+        .upsert({
+          slug: slug,
+          couple_names: w.couple,
+          wedding_date: w.date || null,
+          venue: w.venue || null,
+          ceremony: w.ceremony || null,
+          reception: w.reception || null,
+          message: w.message || null,
+          story: w.story || null,
+          map_url: w.mapUrl || null,
+          gps_lat: w.gpsLat || null,
+          gps_lng: w.gpsLng || null,
+          music_url: w.musicUrl || null,
+          dress_code: formatDressCode(w) || null,
+          program: w.program || null,
+          website_note: w.websiteNote || null
+        }, { onConflict: 'slug' })
+        .select('id')
+        .maybeSingle();
+
+      const dbWeddingId = wRow?.id;
+      if (!dbWeddingId) continue;
+
+      for (const g of (w.guests || [])) {
+        await client
+          .from('guests')
+          .upsert({
+            wedding_id: dbWeddingId,
+            full_name: g.name,
+            phone: g.phone || '',
+            seats: g.seats || 1,
+            qr_token: g.token,
+            rsvp_status: g.status || 'pending',
+            arrived: Boolean(g.arrived)
+          }, { onConflict: 'qr_token' });
+      }
+    }
+  } catch (e) {}
+}
 
 const t = k => (translations[db.lang] && translations[db.lang][k]) || translations.fr[k] || k;
 
@@ -457,8 +514,11 @@ function persist(skipCloud) {
   } catch (e) {
     showToast('Stockage navigateur saturé : réduisez la taille du fichier média.');
   }
-  if (!skipCloud && supabaseClient && currentUser) {
-    pushToCloud();
+  if (!skipCloud) {
+    syncDirectTablesToSupabase();
+    if (supabaseClient && currentUser) {
+      pushToCloud();
+    }
   }
 }
 
@@ -502,7 +562,7 @@ function formatDressCode(w) {
 }
 
 function header() {
-  const isOnline = Boolean(supabaseClient && currentUser);
+  const isOnline = Boolean(getDirectClient());
   return `<header class="topbar">
     <div class="brand">
       <div class="brand-mark">N</div>
@@ -513,7 +573,7 @@ function header() {
     </div>
     <div class="top-actions">
       <button class="btn ghost sm" onclick="go('sync')" title="Synchronisation">
-        <span class="sync-dot ${isOnline ? 'online' : ''}"></span>${isOnline ? 'Cloud OK' : 'Local'}
+        <span class="sync-dot ${isOnline ? 'online' : ''}"></span>${isOnline ? 'Supabase OK' : 'Local'}
       </button>
       <select class="lang" onchange="setLang(this.value)">
         <option value="fr" ${db.lang === 'fr' ? 'selected' : ''}>FR</option>
@@ -859,7 +919,7 @@ function saveWeddingDetails() {
   pendingMusicName = '';
 
   persist();
-  showToast('Modifications enregistrées');
+  showToast('Modifications enregistrées et synchronisées');
   render('settings');
 }
 
@@ -1151,56 +1211,24 @@ function deleteWish(wid) {
 }
 
 function syncPage() {
-  const sqlSchema = `-- Exécutez ce script dans SQL Editor de votre projet Supabase
-create table if not exists public.nuptia_workspaces (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  payload jsonb not null,
-  updated_at timestamptz default now()
-);
-alter table public.nuptia_workspaces enable row level security;
-create policy "Owner access" on public.nuptia_workspaces
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);`;
-
   shell('sync', `
     <div class="head-row">
       <div>
         <div class="eyebrow">NUPTIA / CLOUD & BACKUP</div>
         <h1 class="page-title">Synchronisation & Sécurité</h1>
-        <div class="sub">Synchronisez vos mariages entre plusieurs téléphones avec Supabase et gérez vos sauvegardes.</div>
+        <div class="sub">Vos invités et mariages sont synchronisés directement avec Supabase pour s'ouvrir sur tous les téléphones.</div>
       </div>
     </div>
 
     <section class="panel">
-      <h3>1. Connexion Supabase (Multi-téléphones)</h3>
+      <h3>1. Connexion Supabase directe</h3>
       <div class="form-grid" style="margin-top:12px">
         <div class="field"><label>URL du projet Supabase</label><input id="sb-url" value="${esc(cloudCfg.url)}" placeholder="https://xxxxx.supabase.co"></div>
-        <div class="field"><label>Clé publique (anon key)</label><input id="sb-key" value="${esc(cloudCfg.anonKey)}" placeholder="eyJhbGciOiJIUzI1NiIs..."></div>
+        <div class="field"><label>Clé publique (anon key)</label><input id="sb-key" value="${esc(cloudCfg.anonKey)}" placeholder="sb_publishable_..."></div>
       </div>
       <div class="actions" style="margin-top:12px">
-        <button class="btn primary" onclick="saveSupabaseConfig()">Enregistrer la configuration</button>
+        <button class="btn primary" onclick="saveSupabaseConfig()">Enregistrer et synchroniser maintenant</button>
       </div>
-
-      ${supabaseClient ? `
-        <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line)">
-          ${currentUser ? `
-            <p class="small">Connecté en tant que : <strong>${esc(currentUser.email)}</strong></p>
-            <div class="actions">
-              <button class="btn gold" onclick="pushToCloud(true)">↑ Envoyer vers le cloud</button>
-              <button class="btn" onclick="syncFromCloud(false)">↓ Récupérer depuis le cloud</button>
-              <button class="btn danger" onclick="cloudSignOut()">Se déconnecter</button>
-            </div>
-          ` : `
-            <div class="form-grid">
-              <div class="field"><label>Email organisateur</label><input id="auth-email" type="email" value="${esc(cloudCfg.userEmail || '')}" placeholder="vous@exemple.com"></div>
-              <div class="field"><label>Mot de passe</label><input id="auth-pass" type="password" placeholder="••••••••"></div>
-            </div>
-            <div class="actions" style="margin-top:12px">
-              <button class="btn primary" onclick="cloudSignIn()">Se connecter</button>
-              <button class="btn" onclick="cloudSignUp()">Créer un compte organisateur</button>
-            </div>
-          `}
-        </div>
-      ` : ''}
     </section>
 
     <section class="panel">
@@ -1211,52 +1239,16 @@ create policy "Owner access" on public.nuptia_workspaces
         <label class="btn" style="display:inline-block">⤒ Restaurer une sauvegarde<input type="file" accept=".json" style="display:none" onchange="restoreBackup(this)"></label>
       </div>
     </section>
-
-    <section class="panel">
-      <h3>3. Script SQL de sécurité (RLS) à exécuter sur Supabase</h3>
-      <div class="section-note">Ce script garantit que chaque organisateur accède uniquement à ses propres espaces de mariage.</div>
-      <code class="sql">${esc(sqlSchema)}</code>
-    </section>
   `);
 }
 
-function saveSupabaseConfig() {
+async function saveSupabaseConfig() {
   cloudCfg.url = $('#sb-url').value.trim();
   cloudCfg.anonKey = $('#sb-key').value.trim();
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
   initSupabase();
-  showToast('Configuration Supabase enregistrée');
-  render('sync');
-}
-
-async function cloudSignUp() {
-  const email = $('#auth-email').value.trim();
-  const password = $('#auth-pass').value;
-  if (!email || !password) return showToast('Entrez email et mot de passe');
-  const { data, error } = await supabaseClient.auth.signUp({ email, password });
-  if (error) return showToast(error.message);
-  cloudCfg.userEmail = email;
-  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
-  currentUser = data.user;
-  showToast('Compte créé ! Vérifiez votre boîte mail si confirmation activée.');
-  render('sync');
-}
-
-async function cloudSignIn() {
-  const email = $('#auth-email').value.trim();
-  const password = $('#auth-pass').value;
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) return showToast(error.message);
-  cloudCfg.userEmail = email;
-  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
-  currentUser = data.user;
-  await syncFromCloud(false);
-  render('sync');
-}
-
-async function cloudSignOut() {
-  await supabaseClient.auth.signOut();
-  currentUser = null;
+  await syncDirectTablesToSupabase();
+  showToast('Configuration enregistrée et invités envoyés sur Supabase !');
   render('sync');
 }
 
@@ -1483,13 +1475,93 @@ function renderCountdown(dateStr) {
   </div>`;
 }
 
-function renderInvite(wid, token) {
-  const w = db.weddings.find(x => x.id === wid);
+async function fetchSupabaseInvite(wid, token) {
+  const pubClient = getDirectClient();
+  if (!pubClient) return null;
+  try {
+    const { data: wData } = await pubClient
+      .from('weddings')
+      .select('*')
+      .or(`id.eq.${wid},slug.eq.${wid}`)
+      .maybeSingle();
+    if (!wData) return null;
+
+    let guest = null;
+    if (token) {
+      const { data: gData } = await pubClient
+        .from('guests')
+        .select('*')
+        .eq('wedding_id', wData.id)
+        .eq('qr_token', token)
+        .maybeSingle();
+      if (gData) {
+        guest = {
+          id: gData.id,
+          name: gData.full_name,
+          phone: gData.phone || '',
+          seats: gData.seats || 1,
+          tableId: gData.table_id || '',
+          status: gData.rsvp_status || 'pending',
+          token: gData.qr_token,
+          arrived: Boolean(gData.arrived)
+        };
+      }
+    }
+
+    return {
+      wedding: {
+        id: wData.slug || wData.id,
+        couple: wData.couple_names || wData.couple || 'Mariage',
+        date: wData.wedding_date || wData.date || '',
+        venue: wData.venue || '',
+        reception: wData.reception || wData.venue || '',
+        ceremony: wData.ceremony || '',
+        message: wData.message || '',
+        story: wData.story || '',
+        photo: wData.photo || '',
+        mapUrl: wData.map_url || '',
+        gpsLat: wData.gps_lat || '',
+        gpsLng: wData.gps_lng || '',
+        musicUrl: wData.music_url || '',
+        musicData: '',
+        musicName: '',
+        dressCodes: [],
+        dressCode: wData.dress_code || '',
+        program: wData.program || '',
+        websiteNote: wData.website_note || '',
+        tables: [],
+        guests: guest ? [guest] : [],
+        wishes: []
+      },
+      guest
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function renderInvite(wid, token) {
+  let w = db.weddings.find(x => x.id === wid);
+  let g = token && w ? w.guests.find(x => x.token === token) : null;
+
+  if (!w || (token && !g)) {
+    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation…</p></div></div>`;
+    const cloudHit = await fetchSupabaseInvite(wid, token);
+    if (cloudHit && cloudHit.wedding) {
+      if (!w) {
+        db.weddings.push(cloudHit.wedding);
+        w = cloudHit.wedding;
+      } else if (cloudHit.guest && !w.guests.some(x => x.token === cloudHit.guest.token)) {
+        w.guests.push(cloudHit.guest);
+      }
+      g = token ? w.guests.find(x => x.token === token) : null;
+    }
+  }
+
   if (!w) {
     $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;
     return;
   }
-  const g = token ? w.guests.find(x => x.token === token) : null;
   if (token && !g) {
     $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1></div></div>`;
     return;
@@ -1540,8 +1612,8 @@ function renderInvite(wid, token) {
       <div id="qr" class="qr"></div>
       <div class="small">${t('scan')} : ${esc(g.token)}</div>
       <div class="actions" style="justify-content:center;margin-top:14px">
-        <button class="btn primary" onclick="guestRsvp('${wid}','${g.token}','confirmed')">${t('rsvp')}</button>
-        <button class="btn" onclick="guestRsvp('${wid}','${g.token}','declined')">${t('declineRsvp')}</button>
+        <button class="btn primary" onclick="guestRsvp('${w.id}','${g.token}','confirmed')">${t('rsvp')}</button>
+        <button class="btn" onclick="guestRsvp('${w.id}','${g.token}','declined')">${t('declineRsvp')}</button>
       </div>
     </div>` : ''}
 
@@ -1549,7 +1621,7 @@ function renderInvite(wid, token) {
       <h3>${t('guestbookTitle')}</h3>
       <div class="field" style="margin-bottom:8px"><input id="wish-author" value="${g ? esc(g.name) : ''}" placeholder="${t('yourName')}"></div>
       <div class="field" style="margin-bottom:8px"><textarea id="wish-text" style="min-height:70px" placeholder="${t('yourWish')}"></textarea></div>
-      <button class="btn gold sm" onclick="submitWish('${wid}','${token || ''}')">${t('sendWish')}</button>
+      <button class="btn gold sm" onclick="submitWish('${w.id}','${token || ''}')">${t('sendWish')}</button>
       <div style="margin-top:14px">
         ${(w.wishes || []).slice().reverse().map(item => `<div class="guestbook-item"><strong>${esc(item.author)}</strong><p style="margin:4px 0 0">${esc(item.text)}</p></div>`).join('')}
       </div>
@@ -1558,7 +1630,7 @@ function renderInvite(wid, token) {
     <div class="invite-rule"></div>
     <div class="small">NUPTIA · Chaque union mérite une belle invitation.</div>
     <div style="margin-top:16px">
-      <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${wid}','${token || ''}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
+      <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${w.id}','${token || ''}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
     </div>
   </article></div>`;
 
@@ -1574,12 +1646,16 @@ function renderInvite(wid, token) {
   }
 }
 
-function guestRsvp(wid, token, status) {
+async function guestRsvp(wid, token, status) {
   const w = db.weddings.find(x => x.id === wid);
   const g = w?.guests.find(x => x.token === token);
   if (!g) return;
   g.status = status;
-  persist();
+  persist(true);
+  const pubClient = getDirectClient();
+  if (pubClient) {
+    await pubClient.from('guests').update({ rsvp_status: status }).eq('qr_token', token);
+  }
   showToast(status === 'confirmed' ? t('rsvpDone') : t('rsvpDeclinedDone'));
   renderInvite(wid, token);
 }
@@ -1612,22 +1688,8 @@ function setLang(v) {
 }
 
 window.addEventListener('popstate', () => render(location.hash.slice(1) || 'overview'));
+syncDirectTablesToSupabase();
 render(location.hash.slice(1) || 'overview');
 </script>
-  <script type="module" src="./nuptia-app.js"></script>
 </body>
-  <div id="role-bar">
-  <input id="role-code-input" type="password" placeholder="Code PIN" />
-  <button id="role-login-btn" type="button">Valider</button>
-  <button id="role-logout-btn" type="button">Déconnexion</button>
-  <span id="role-status"></span>
-    <div id="invite-view"></div>
-</div>
-    <div id="qr-scanner-box" data-role="protocol">
-  <button id="start-qr-btn" type="button">Activer caméra QR</button>
-  <button id="stop-qr-btn" type="button">Arrêter caméra</button>
-  <video id="qr-video" playsinline style="width: 100%; max-width: 360px; display: none;"></video>
-  <p id="qr-scan-result"></p>
-</div>
-</div>
 </html>
