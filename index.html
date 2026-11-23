@@ -441,19 +441,27 @@ let supabaseClient = null;
 let currentUser = null;
 
 function getDirectClient() {
-  const url = (cloudCfg.url || SB_PUBLIC_URL || '').trim();
-  const key = (cloudCfg.anonKey || SB_PUBLIC_ANON || '').trim();
-  if (!url || !key || !window.supabase) return null;
-  return window.supabase.createClient(url, key);
+  try {
+    const url = (cloudCfg.url || SB_PUBLIC_URL || '').trim();
+    const key = (cloudCfg.anonKey || SB_PUBLIC_ANON || '').trim();
+    if (!url || !key || !window.supabase || typeof window.supabase.createClient !== 'function') return null;
+    return window.supabase.createClient(url, key);
+  } catch (e) {
+    return null;
+  }
 }
 
 function initSupabase() {
-  supabaseClient = getDirectClient();
-  if (supabaseClient) {
-    supabaseClient.auth.getSession().then(({ data }) => {
-      currentUser = data?.session?.user || null;
-      if (currentUser) syncFromCloud(true);
-    }).catch(() => {});
+  try {
+    supabaseClient = getDirectClient();
+    if (supabaseClient && supabaseClient.auth && typeof supabaseClient.auth.getSession === 'function') {
+      supabaseClient.auth.getSession().then(({ data }) => {
+        currentUser = data?.session?.user || null;
+        if (currentUser) syncFromCloud(true);
+      }).catch(() => {});
+    }
+  } catch (e) {
+    supabaseClient = null;
   }
 }
 initSupabase();
@@ -462,9 +470,9 @@ async function syncDirectTablesToSupabase() {
   const client = getDirectClient();
   if (!client) return;
   try {
-    for (const w of db.weddings) {
+    for (const w of (db.weddings || [])) {
       const slug = w.id;
-      const { data: wRow } = await client
+      const { data: wRow, error: wErr } = await client
         .from('weddings')
         .upsert({
           slug: slug,
@@ -486,6 +494,7 @@ async function syncDirectTablesToSupabase() {
         .select('id')
         .maybeSingle();
 
+      if (wErr) continue;
       const dbWeddingId = wRow?.id;
       if (!dbWeddingId) continue;
 
@@ -607,22 +616,26 @@ function shell(page, content) {
 }
 
 function render(page = 'overview') {
-  const params = new URLSearchParams(location.search);
-  if (params.has('wedding')) {
-    renderInvite(params.get('wedding'), params.get('invite'));
-    return;
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.has('wedding')) {
+      renderInvite(params.get('wedding'), params.get('invite'));
+      return;
+    }
+    const valid = ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'];
+    if (!valid.includes(page)) page = 'overview';
+    if (page === 'overview') return dashboard();
+    if (page === 'weddings') return weddingsPage();
+    if (page === 'settings') return settingsPage();
+    if (page === 'guests') return guestsPage();
+    if (page === 'seating') return seatingPage();
+    if (page === 'checkin') return checkinPage();
+    if (page === 'stats') return statsPage();
+    if (page === 'guestbook') return guestbookPage();
+    if (page === 'sync') return syncPage();
+  } catch (e) {
+    dashboard();
   }
-  const valid = ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'];
-  if (!valid.includes(page)) page = 'overview';
-  if (page === 'overview') return dashboard();
-  if (page === 'weddings') return weddingsPage();
-  if (page === 'settings') return settingsPage();
-  if (page === 'guests') return guestsPage();
-  if (page === 'seating') return seatingPage();
-  if (page === 'checkin') return checkinPage();
-  if (page === 'stats') return statsPage();
-  if (page === 'guestbook') return guestbookPage();
-  if (page === 'sync') return syncPage();
 }
 
 function dashboard() {
@@ -1254,29 +1267,33 @@ async function saveSupabaseConfig() {
 
 async function pushToCloud(manual) {
   if (!supabaseClient || !currentUser) return;
-  const { error } = await supabaseClient.from('nuptia_workspaces').upsert({
-    user_id: currentUser.id,
-    payload: db,
-    updated_at: new Date().toISOString()
-  });
-  if (error && manual) showToast('Erreur sync : ' + error.message);
-  else if (manual) showToast('Données synchronisées vers le cloud !');
+  try {
+    const { error } = await supabaseClient.from('nuptia_workspaces').upsert({
+      user_id: currentUser.id,
+      payload: db,
+      updated_at: new Date().toISOString()
+    });
+    if (error && manual) showToast('Erreur sync : ' + error.message);
+    else if (manual) showToast('Données synchronisées vers le cloud !');
+  } catch (e) {}
 }
 
 async function syncFromCloud(silent) {
   if (!supabaseClient || !currentUser) return;
-  const { data, error } = await supabaseClient.from('nuptia_workspaces').select('payload').eq('user_id', currentUser.id).maybeSingle();
-  if (error) {
-    if (!silent) showToast(error.message);
-    return;
-  }
-  if (data && data.payload && Array.isArray(data.payload.weddings)) {
-    db = data.payload;
-    persist(true);
-    if (!silent) showToast('Données récupérées depuis le cloud !');
-  } else {
-    await pushToCloud(false);
-  }
+  try {
+    const { data, error } = await supabaseClient.from('nuptia_workspaces').select('payload').eq('user_id', currentUser.id).maybeSingle();
+    if (error) {
+      if (!silent) showToast(error.message);
+      return;
+    }
+    if (data && data.payload && Array.isArray(data.payload.weddings)) {
+      db = data.payload;
+      persist(true);
+      if (!silent) showToast('Données récupérées depuis le cloud !');
+    } else {
+      await pushToCloud(false);
+    }
+  } catch (e) {}
 }
 
 function downloadBackup() {
@@ -1541,108 +1558,108 @@ async function fetchSupabaseInvite(wid, token) {
 }
 
 async function renderInvite(wid, token) {
-  let w = db.weddings.find(x => x.id === wid);
-  let g = token && w ? w.guests.find(x => x.token === token) : null;
+  try {
+    let w = db.weddings.find(x => x.id === wid);
+    let g = token && w ? w.guests.find(x => x.token === token) : null;
 
-  if (!w || (token && !g)) {
-    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation…</p></div></div>`;
-    const cloudHit = await fetchSupabaseInvite(wid, token);
-    if (cloudHit && cloudHit.wedding) {
-      if (!w) {
-        db.weddings.push(cloudHit.wedding);
-        w = cloudHit.wedding;
-      } else if (cloudHit.guest && !w.guests.some(x => x.token === cloudHit.guest.token)) {
-        w.guests.push(cloudHit.guest);
+    if (!w || (token && !g)) {
+      $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation…</p></div></div>`;
+      const cloudHit = await fetchSupabaseInvite(wid, token);
+      if (cloudHit && cloudHit.wedding) {
+        if (!w) {
+          db.weddings.push(cloudHit.wedding);
+          w = cloudHit.wedding;
+        } else if (cloudHit.guest && !w.guests.some(x => x.token === cloudHit.guest.token)) {
+          w.guests.push(cloudHit.guest);
+        }
+        g = token ? w.guests.find(x => x.token === token) : null;
       }
-      g = token ? w.guests.find(x => x.token === token) : null;
     }
-  }
 
-  if (!w) {
+    if (!w || (token && !g)) {
+      $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;
+      return;
+    }
+
+    const table = g ? w.tables.find(x => x.id === g.tableId) : null;
+    const mapHref = buildMapLink(w);
+    const dressText = formatDressCode(w);
+    const audioSrc = w.musicData || w.musicUrl;
+
+    $('#app').innerHTML = `<div class="invite-page"><article class="invite-card">
+      <div class="invite-kicker">✧ NUPTIA · ${t('invited')} ✧</div>
+      <div class="invite-title">${esc(w.couple.split('&')[0] || w.couple)}<div class="amp">&</div>${esc(w.couple.split('&')[1] || '')}</div>
+      <div class="invite-rule"></div>
+      <p class="invite-copy">${esc(w.message || t('welcomeText'))}</p>
+      ${w.photo ? `<img class="invite-photo" src="${w.photo}" alt="Photo des mariés">` : ''}
+      ${w.story ? `<div class="invite-extra"><h3>Notre histoire</h3><p>${esc(w.story)}</p></div>` : ''}
+
+      <div class="invite-details">
+        <div class="detail">
+          <strong>${w.date ? new Date(w.date + 'T12:00:00').toLocaleDateString(db.lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : t('datePending')}</strong>
+          <span>${t('dateLabel')}</span>
+        </div>
+        <div class="detail">
+          <strong>${esc(w.venue || 'À préciser')}</strong>
+          <span>${t('placeLabel')}</span>
+        </div>
+      </div>
+
+      ${renderCountdown(w.date)}
+
+      ${(w.ceremony || w.reception || w.program || dressText || w.websiteNote || mapHref) ? `<div class="invite-extra">
+        ${w.ceremony ? `<h3>Cérémonie</h3><p>${esc(w.ceremony)}</p>` : ''}
+        ${w.reception ? `<h3>Réception</h3><p>${esc(w.reception)}</p>` : ''}
+        ${dressText ? `<h3>Dress code</h3><p>${esc(dressText)}</p>` : ''}
+        ${w.program ? `<h3>Programme</h3><p>${esc(w.program)}</p>` : ''}
+        ${w.websiteNote ? `<p>${esc(w.websiteNote)}</p>` : ''}
+        ${mapHref ? `<p><a href="${esc(mapHref)}" target="_blank" rel="noopener">${t('map')}</a></p>` : ''}
+      </div>` : ''}
+
+      ${audioSrc ? `<div class="music-player"><div class="small">♫ Notre musique ${w.musicName ? '— ' + esc(w.musicName) : ''}</div><audio controls preload="metadata" src="${esc(audioSrc)}"></audio></div>` : ''}
+
+      ${g ? `<div class="guest-box">
+        <div class="small">${t('invited')}</div>
+        <strong>${esc(g.name)}</strong>
+        <p class="small">${t('places')} : ${g.seats} · ${t('yourTable')} : ${esc(table?.name || t('notAssigned'))}</p>
+        <div style="margin:8px 0"><span class="pill ${g.status === 'confirmed' ? 'ok' : g.status === 'declined' ? 'no' : ''}">${t(g.status)}</span></div>
+        <div id="qr" class="qr"></div>
+        <div class="small">${t('scan')} : ${esc(g.token)}</div>
+        <div class="actions" style="justify-content:center;margin-top:14px">
+          <button class="btn primary" onclick="guestRsvp('${w.id}','${g.token}','confirmed')">${t('rsvp')}</button>
+          <button class="btn" onclick="guestRsvp('${w.id}','${g.token}','declined')">${t('declineRsvp')}</button>
+        </div>
+      </div>` : ''}
+
+      <div class="invite-extra">
+        <h3>${t('guestbookTitle')}</h3>
+        <div class="field" style="margin-bottom:8px"><input id="wish-author" value="${g ? esc(g.name) : ''}" placeholder="${t('yourName')}"></div>
+        <div class="field" style="margin-bottom:8px"><textarea id="wish-text" style="min-height:70px" placeholder="${t('yourWish')}"></textarea></div>
+        <button class="btn gold sm" onclick="submitWish('${w.id}','${token || ''}')">${t('sendWish')}</button>
+        <div style="margin-top:14px">
+          ${(w.wishes || []).slice().reverse().map(item => `<div class="guestbook-item"><strong>${esc(item.author)}</strong><p style="margin:4px 0 0">${esc(item.text)}</p></div>`).join('')}
+        </div>
+      </div>
+
+      <div class="invite-rule"></div>
+      <div class="small">NUPTIA · Chaque union mérite une belle invitation.</div>
+      <div style="margin-top:16px">
+        <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${w.id}','${token || ''}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
+      </div>
+    </article></div>`;
+
+    if (g && window.QRCode) {
+      new QRCode($('#qr'), {
+        text: g.token,
+        width: 112,
+        height: 112,
+        colorDark: '#29251f',
+        colorLight: '#fffdf9',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+  } catch (e) {
     $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;
-    return;
-  }
-  if (token && !g) {
-    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1></div></div>`;
-    return;
-  }
-
-  const table = g ? w.tables.find(x => x.id === g.tableId) : null;
-  const mapHref = buildMapLink(w);
-  const dressText = formatDressCode(w);
-  const audioSrc = w.musicData || w.musicUrl;
-
-  $('#app').innerHTML = `<div class="invite-page"><article class="invite-card">
-    <div class="invite-kicker">✧ NUPTIA · ${t('invited')} ✧</div>
-    <div class="invite-title">${esc(w.couple.split('&')[0] || w.couple)}<div class="amp">&</div>${esc(w.couple.split('&')[1] || '')}</div>
-    <div class="invite-rule"></div>
-    <p class="invite-copy">${esc(w.message || t('welcomeText'))}</p>
-    ${w.photo ? `<img class="invite-photo" src="${w.photo}" alt="Photo des mariés">` : ''}
-    ${w.story ? `<div class="invite-extra"><h3>Notre histoire</h3><p>${esc(w.story)}</p></div>` : ''}
-
-    <div class="invite-details">
-      <div class="detail">
-        <strong>${w.date ? new Date(w.date + 'T12:00:00').toLocaleDateString(db.lang === 'fr' ? 'fr-FR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : t('datePending')}</strong>
-        <span>${t('dateLabel')}</span>
-      </div>
-      <div class="detail">
-        <strong>${esc(w.venue || 'À préciser')}</strong>
-        <span>${t('placeLabel')}</span>
-      </div>
-    </div>
-
-    ${renderCountdown(w.date)}
-
-    ${(w.ceremony || w.reception || w.program || dressText || w.websiteNote || mapHref) ? `<div class="invite-extra">
-      ${w.ceremony ? `<h3>Cérémonie</h3><p>${esc(w.ceremony)}</p>` : ''}
-      ${w.reception ? `<h3>Réception</h3><p>${esc(w.reception)}</p>` : ''}
-      ${dressText ? `<h3>Dress code</h3><p>${esc(dressText)}</p>` : ''}
-      ${w.program ? `<h3>Programme</h3><p>${esc(w.program)}</p>` : ''}
-      ${w.websiteNote ? `<p>${esc(w.websiteNote)}</p>` : ''}
-      ${mapHref ? `<p><a href="${esc(mapHref)}" target="_blank" rel="noopener">${t('map')}</a></p>` : ''}
-    </div>` : ''}
-
-    ${audioSrc ? `<div class="music-player"><div class="small">♫ Notre musique ${w.musicName ? '— ' + esc(w.musicName) : ''}</div><audio controls preload="metadata" src="${esc(audioSrc)}"></audio></div>` : ''}
-
-    ${g ? `<div class="guest-box">
-      <div class="small">${t('invited')}</div>
-      <strong>${esc(g.name)}</strong>
-      <p class="small">${t('places')} : ${g.seats} · ${t('yourTable')} : ${esc(table?.name || t('notAssigned'))}</p>
-      <div style="margin:8px 0"><span class="pill ${g.status === 'confirmed' ? 'ok' : g.status === 'declined' ? 'no' : ''}">${t(g.status)}</span></div>
-      <div id="qr" class="qr"></div>
-      <div class="small">${t('scan')} : ${esc(g.token)}</div>
-      <div class="actions" style="justify-content:center;margin-top:14px">
-        <button class="btn primary" onclick="guestRsvp('${w.id}','${g.token}','confirmed')">${t('rsvp')}</button>
-        <button class="btn" onclick="guestRsvp('${w.id}','${g.token}','declined')">${t('declineRsvp')}</button>
-      </div>
-    </div>` : ''}
-
-    <div class="invite-extra">
-      <h3>${t('guestbookTitle')}</h3>
-      <div class="field" style="margin-bottom:8px"><input id="wish-author" value="${g ? esc(g.name) : ''}" placeholder="${t('yourName')}"></div>
-      <div class="field" style="margin-bottom:8px"><textarea id="wish-text" style="min-height:70px" placeholder="${t('yourWish')}"></textarea></div>
-      <button class="btn gold sm" onclick="submitWish('${w.id}','${token || ''}')">${t('sendWish')}</button>
-      <div style="margin-top:14px">
-        ${(w.wishes || []).slice().reverse().map(item => `<div class="guestbook-item"><strong>${esc(item.author)}</strong><p style="margin:4px 0 0">${esc(item.text)}</p></div>`).join('')}
-      </div>
-    </div>
-
-    <div class="invite-rule"></div>
-    <div class="small">NUPTIA · Chaque union mérite une belle invitation.</div>
-    <div style="margin-top:16px">
-      <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${w.id}','${token || ''}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
-    </div>
-  </article></div>`;
-
-  if (g && window.QRCode) {
-    new QRCode($('#qr'), {
-      text: g.token,
-      width: 112,
-      height: 112,
-      colorDark: '#29251f',
-      colorLight: '#fffdf9',
-      correctLevel: QRCode.CorrectLevel.M
-    });
   }
 }
 
@@ -1654,7 +1671,9 @@ async function guestRsvp(wid, token, status) {
   persist(true);
   const pubClient = getDirectClient();
   if (pubClient) {
-    await pubClient.from('guests').update({ rsvp_status: status }).eq('qr_token', token);
+    try {
+      await pubClient.from('guests').update({ rsvp_status: status }).eq('qr_token', token);
+    } catch (e) {}
   }
   showToast(status === 'confirmed' ? t('rsvpDone') : t('rsvpDeclinedDone'));
   renderInvite(wid, token);
