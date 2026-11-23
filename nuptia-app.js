@@ -48,6 +48,53 @@ function setupRoleBar() {
   updateUI();
 }
 
+function findInviteInLocalStorage(token) {
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      const raw = localStorage.getItem(key);
+      if (!raw || !raw.startsWith("{")) continue;
+      const parsed = JSON.parse(raw);
+      const lists = [
+        parsed.guests,
+        parsed.wedding?.guests,
+        ...(Array.isArray(parsed.weddings) ? parsed.weddings.map((w) => w.guests) : [])
+      ].filter(Array.isArray);
+
+      for (const list of lists) {
+        const found = list.find(
+          (g) =>
+            g &&
+            (g.qr_token === token ||
+              g.token === token ||
+              g.invite_token === token ||
+              g.code === token ||
+              String(g.id) === token)
+        );
+        if (found) {
+          const weddingName =
+            parsed.couple_names ||
+            parsed.wedding?.couple_names ||
+            parsed.weddings?.[0]?.couple_names ||
+            "A.Theuriet & Naomie M";
+          return {
+            wedding: { slug, couple_names: weddingName },
+            guest: {
+              ...found,
+              full_name: found.full_name || found.name || found.nom || "Invité",
+              qr_token: found.qr_token || found.token || found.code || token
+            },
+            table: found.table_name ? { name: found.table_name } : null
+          };
+        }
+      }
+    }
+  } catch (_) {
+    // Ignore les clés non JSON
+  }
+  return null;
+}
+
 async function sbFetch(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
@@ -66,8 +113,13 @@ async function sbFetch(path, options = {}) {
 }
 
 async function loadPublicInviteData() {
+  const localMatch = findInviteInLocalStorage(inviteToken);
+  if (localMatch) {
+    return localMatch;
+  }
+
   const weddings = await sbFetch(`weddings?slug=eq.${encodeURIComponent(slug)}&select=*`);
-  const wedding = weddings[0] || { slug, couple_names: "Theuriet & Naomi" };
+  const wedding = weddings[0] || { slug, couple_names: "A.Theuriet & Naomie M" };
 
   const guests = await sbFetch(
     `guests?qr_token=eq.${encodeURIComponent(inviteToken)}&select=*`
@@ -116,18 +168,22 @@ function renderPublicInvite({ wedding, guest, table }) {
   `;
 
   container.querySelector("#btn-confirm")?.addEventListener("click", async () => {
-    await sbFetch(`guests?id=eq.${encodeURIComponent(guest.id)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ rsvp_status: "confirmed" })
-    });
+    if (guest.id) {
+      await sbFetch(`guests?id=eq.${encodeURIComponent(guest.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ rsvp_status: "confirmed" })
+      }).catch(() => {});
+    }
     alert("Présence confirmée !");
   });
 
   container.querySelector("#btn-decline")?.addEventListener("click", async () => {
-    await sbFetch(`guests?id=eq.${encodeURIComponent(guest.id)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ rsvp_status: "declined" })
-    });
+    if (guest.id) {
+      await sbFetch(`guests?id=eq.${encodeURIComponent(guest.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ rsvp_status: "declined" })
+      }).catch(() => {});
+    }
     alert("Réponse enregistrée.");
   });
 }
