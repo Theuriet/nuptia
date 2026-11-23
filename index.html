@@ -151,7 +151,6 @@ code.sql{display:block;background:#24201b;color:#f4ede2;padding:12px;border-radi
   .invite-details{gap:16px}
 }
 </style>
-</style>
 </head>
 <body>
 <div id="app" class="app"></div>
@@ -207,7 +206,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Sauvegarde locale + synchronisation Supabase.',
+    adminNote: 'NUPTIA V3 · Sauvegarde locale + partage & synchronisation Supabase.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -292,7 +291,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Local backup + Supabase sync.',
+    adminNote: 'NUPTIA V3 · Local backup + Supabase sharing & sync.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -387,6 +386,12 @@ create table if not exists public.guests (
   qr_token text unique not null,
   rsvp_status text default 'pending',
   arrived boolean default false
+);
+
+create table if not exists public.nuptia_workspaces (
+  user_id uuid primary key,
+  payload jsonb not null,
+  updated_at timestamptz default now()
 );`;
 
 function initial() {
@@ -461,12 +466,13 @@ try {
   w.wishes = w.wishes || [];
 });
 
-let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '' };
+let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '', role: 'admin' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
   if (saved.url) cloudCfg.url = saved.url;
   if (saved.anonKey) cloudCfg.anonKey = saved.anonKey;
   if (saved.userEmail) cloudCfg.userEmail = saved.userEmail;
+  if (saved.role) cloudCfg.role = saved.role;
 } catch (e) {}
 
 let supabaseClient = null;
@@ -481,6 +487,10 @@ function getDirectClient() {
   } catch (e) {
     return null;
   }
+}
+
+function isAdminAuthorized() {
+  return Boolean(currentUser) || (cloudCfg.role === 'admin' && Boolean(cloudCfg.userEmail));
 }
 
 function initSupabase() {
@@ -498,11 +508,16 @@ function initSupabase() {
 }
 initSupabase();
 
-async function syncDirectTablesToSupabase() {
+async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
   const client = getDirectClient();
-  if (!client) return;
+  if (!client) return false;
+  let synced = false;
   try {
-    for (const w of (db.weddings || [])) {
+    const list = targetWeddingId
+      ? (db.weddings || []).filter(w => w.id === targetWeddingId)
+      : (db.weddings || []);
+
+    for (const w of list) {
       const slug = w.id;
       const { data: wRow, error: wErr } = await client
         .from('weddings')
@@ -527,10 +542,15 @@ async function syncDirectTablesToSupabase() {
         .maybeSingle();
 
       if (wErr) continue;
+      synced = true;
       const dbWeddingId = wRow?.id;
       if (!dbWeddingId) continue;
 
-      for (const g of (w.guests || [])) {
+      const guestsToSync = targetToken
+        ? (w.guests || []).filter(g => g.token === targetToken)
+        : (w.guests || []);
+
+      for (const g of guestsToSync) {
         await client
           .from('guests')
           .upsert({
@@ -545,6 +565,7 @@ async function syncDirectTablesToSupabase() {
       }
     }
   } catch (e) {}
+  return synced;
 }
 
 const t = k => (translations[db.lang] && translations[db.lang][k]) || translations.fr[k] || k;
@@ -624,6 +645,22 @@ function header() {
   </header>`;
 }
 
+function bottomAuthBar() {
+  const roleLabel = currentUser
+    ? `Admin connecté (${esc(currentUser.email || '')})`
+    : (cloudCfg.role === 'protocol' ? 'Mode Protocole' : (cloudCfg.userEmail ? `Admin (${esc(cloudCfg.userEmail)})` : 'Accès Admin / Protocole'));
+  return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div>
+      <div class="small">Autorisation & Protocole</div>
+      <strong style="font-size:13px">${roleLabel}</strong>
+    </div>
+    <div class="actions">
+      <button class="btn sm" onclick="openAdminAuthModal()">Autorisation Admin</button>
+      <button class="btn sm" onclick="go('sync')">Protocole & Sync</button>
+    </div>
+  </div>`;
+}
+
 function shell(page, content) {
   const w = wedding();
   const navItems = [
@@ -643,8 +680,54 @@ function shell(page, content) {
       ${w ? `<div class="active-wedding-badge"><span class="small">Mariage sélectionné</span><strong>${esc(w.couple)}</strong></div>` : ''}
       ${navItems.map(([k, i]) => `<button class="nav ${page === k ? 'active' : ''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}
     </aside>
-    <main class="main">${content}<div class="footer">${t('adminNote')}</div></main>
+    <main class="main">${content}${bottomAuthBar()}<div class="footer">${t('adminNote')}</div></main>
   </div>`;
+}
+
+function openAdminAuthModal() {
+  openModal('Autorisation Administrateur & Rôle', `
+    <div class="form-grid">
+      <div class="field full">
+        <label>Rôle actif</label>
+        <select id="auth-role">
+          <option value="admin" ${cloudCfg.role !== 'protocol' ? 'selected' : ''}>Administrateur</option>
+          <option value="protocol" ${cloudCfg.role === 'protocol' ? 'selected' : ''}>Protocole / Accueil</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>E-mail administrateur</label>
+        <input id="auth-email" type="email" value="${esc(cloudCfg.userEmail || '')}" placeholder="admin@exemple.com">
+      </div>
+      <div class="field full">
+        <label>Mot de passe Supabase (facultatif si session locale)</label>
+        <input id="auth-pass" type="password" placeholder="••••••••">
+      </div>
+    </div>
+  `, 'applyAdminAuthFromModal()', 'Valider l’autorisation');
+}
+
+async function applyAdminAuthFromModal() {
+  const role = $('#auth-role').value;
+  const email = $('#auth-email').value.trim();
+  const pass = $('#auth-pass').value;
+  cloudCfg.role = role;
+  if (email) cloudCfg.userEmail = email;
+  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  initSupabase();
+
+  if (supabaseClient && email && pass) {
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+      if (!error && data?.user) {
+        currentUser = data.user;
+        showToast('Session administrateur Supabase active');
+      }
+    } catch (e) {}
+  } else {
+    showToast(`Rôle ${role === 'protocol' ? 'Protocole' : 'Administrateur'} enregistré`);
+  }
+  closeModal();
+  render(location.hash.slice(1) || 'overview');
 }
 
 function render(page = 'overview') {
@@ -1261,7 +1344,7 @@ function syncPage() {
       <div>
         <div class="eyebrow">NUPTIA / CLOUD & BACKUP</div>
         <h1 class="page-title">Synchronisation & Sécurité</h1>
-        <div class="sub">Connexion Supabase, authentification administrateur et protocole SQL.</div>
+        <div class="sub">Connexion Supabase, autorisation administrateur, rôle protocole et protocole SQL.</div>
       </div>
     </div>
 
@@ -1277,19 +1360,28 @@ function syncPage() {
     </section>
 
     <section class="panel">
-      <h3>2. Connexion compte administrateur</h3>
-      <div class="section-note">Connectez-vous avec votre e-mail et mot de passe administrateur Supabase pour synchroniser l’espace complet.</div>
+      <h3>2. Autorisation Administrateur & Rôle</h3>
+      <div class="section-note">Définissez votre rôle et connectez-vous avec votre e-mail et mot de passe administrateur Supabase pour synchroniser l’espace complet.</div>
       <div class="form-grid" style="margin-top:12px">
+        <div class="field">
+          <label>Rôle</label>
+          <select id="sb-role">
+            <option value="admin" ${cloudCfg.role !== 'protocol' ? 'selected' : ''}>Administrateur</option>
+            <option value="protocol" ${cloudCfg.role === 'protocol' ? 'selected' : ''}>Protocole</option>
+          </select>
+        </div>
         <div class="field"><label>E-mail administrateur</label><input id="sb-email" type="email" value="${esc(cloudCfg.userEmail)}" placeholder="admin@exemple.com"></div>
-        <div class="field"><label>Mot de passe</label><input id="sb-pass" type="password" placeholder="••••••••"></div>
+        <div class="field full"><label>Mot de passe</label><input id="sb-pass" type="password" placeholder="••••••••"></div>
       </div>
       <div class="actions" style="margin-top:12px">
-        <button class="btn gold" onclick="signInAdmin()">Se connecter</button>
+        <button class="btn gold" onclick="signInAdmin()">Autoriser / Se connecter</button>
         <button class="btn" onclick="pushToCloud(true)">Envoyer vers le cloud</button>
         <button class="btn" onclick="syncFromCloud(false)">Récupérer depuis le cloud</button>
         ${currentUser ? `<button class="btn danger" onclick="signOutAdmin()">Déconnexion</button>` : ''}
       </div>
-      <div class="small" style="margin-top:10px">État session : <strong>${currentUser ? esc(currentUser.email || 'Connecté') : 'Non connecté'}</strong></div>
+      <div class="small" style="margin-top:10px">
+        Statut autorisation : <strong>${isAdminAuthorized() ? (currentUser ? 'Administrateur authentifié (' + esc(currentUser.email || '') + ')' : 'Rôle ' + esc(cloudCfg.role || 'admin') + ' actif') : 'Non autorisé'}</strong>
+      </div>
     </section>
 
     <section class="panel">
@@ -1329,29 +1421,39 @@ async function saveSupabaseConfig() {
 async function signInAdmin() {
   cloudCfg.url = $('#sb-url').value.trim();
   cloudCfg.anonKey = $('#sb-key').value.trim();
+  cloudCfg.role = $('#sb-role') ? $('#sb-role').value : 'admin';
   cloudCfg.userEmail = $('#sb-email').value.trim();
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
   initSupabase();
   const password = $('#sb-pass').value;
-  if (!supabaseClient || !cloudCfg.userEmail || !password) {
-    showToast('Renseignez l’URL, la clé, l’e-mail et le mot de passe');
-    return;
-  }
-  try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email: cloudCfg.userEmail,
-      password
-    });
-    if (error) {
-      showToast('Connexion impossible : ' + error.message);
+
+  if (supabaseClient && cloudCfg.userEmail && password) {
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: cloudCfg.userEmail,
+        password
+      });
+      if (error) {
+        showToast('Connexion impossible : ' + error.message);
+        return;
+      }
+      currentUser = data?.user || null;
+      showToast('Connecté en tant qu’administrateur');
+      await syncFromCloud(true);
+      render('sync');
+      return;
+    } catch (e) {
+      showToast('Erreur de connexion');
       return;
     }
-    currentUser = data?.user || null;
-    showToast('Connecté en tant qu’administrateur');
-    await syncFromCloud(true);
+  }
+
+  if (cloudCfg.userEmail || cloudCfg.role) {
+    await syncDirectTablesToSupabase();
+    showToast('Autorisation enregistrée et tables synchronisées');
     render('sync');
-  } catch (e) {
-    showToast('Erreur de connexion');
+  } else {
+    showToast('Renseignez l’e-mail ou le mot de passe administrateur');
   }
 }
 
@@ -1365,8 +1467,9 @@ async function signOutAdmin() {
 }
 
 async function pushToCloud(manual) {
+  await syncDirectTablesToSupabase();
   if (!supabaseClient || !currentUser) {
-    if (manual) showToast('Connectez-vous d’abord en administrateur');
+    if (manual) showToast('Tables publiques synchronisées (connectez-vous pour la sauvegarde privée)');
     return;
   }
   try {
@@ -1555,19 +1658,22 @@ function saveTable() {
   render('seating');
 }
 
-function guestLink(wid, token) {
+async function guestLink(wid, token) {
+  await syncDirectTablesToSupabase(wid, token);
   const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid) + '&invite=' + encodeURIComponent(token);
   openShare(url);
 }
 
-function publicLink(wid) {
+async function publicLink(wid) {
+  await syncDirectTablesToSupabase(wid);
   const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid);
   openShare(url);
 }
 
 function openShare(url) {
   openModal(t('invite'), `
-    <div class="field"><label>URL de l’invitation</label><input id="share-url" value="${esc(url)}" readonly></div>
+    <div class="field"><label>URL de l’invitation partagée</label><input id="share-url" value="${esc(url)}" readonly></div>
+    <div class="notice">Ce lien synchronise l’invitation via Supabase pour qu’elle s’ouvre sur d’autres téléphones.</div>
     <div class="actions" style="margin-top:14px">
       <button class="btn" onclick="copyShare()">⧉ ${t('copy')}</button>
       <button class="btn gold" onclick="whatsShare()">◉ ${t('share')}</button>
@@ -1670,7 +1776,7 @@ async function renderInvite(wid, token) {
     let g = token && w ? w.guests.find(x => x.token === token) : null;
 
     if (!w || (token && !g)) {
-      $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation…</p></div></div>`;
+      $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation partagée…</p></div></div>`;
       const cloudHit = await fetchSupabaseInvite(wid, token);
       if (cloudHit && cloudHit.wedding) {
         if (!w) {
