@@ -11,12 +11,53 @@ import {
   updateGuestRsvp,
   buildWhatsAppShareLink
 } from "./nuptia-invite.js";
+import {
+  loginWithCode,
+  getCurrentRole,
+  logoutRole,
+  applyRolePermissions
+} from "./nuptia-auth.js";
 
 const params = new URLSearchParams(window.location.search);
 const slug = params.get("wedding") || "theuriet-naomi";
 const inviteToken = params.get("invite");
 
+function setupRoleBar() {
+  const inputEl = document.querySelector("#role-code-input");
+  const loginBtn = document.querySelector("#role-login-btn");
+  const logoutBtn = document.querySelector("#role-logout-btn");
+  const statusEl = document.querySelector("#role-status");
+
+  const updateUI = () => {
+    const role = getCurrentRole();
+    applyRolePermissions(role);
+    if (statusEl) {
+      statusEl.textContent = `Rôle : ${role}`;
+    }
+  };
+
+  loginBtn?.addEventListener("click", () => {
+    if (!inputEl) return;
+    const role = loginWithCode(inputEl.value);
+    if (!role) {
+      if (statusEl) statusEl.textContent = "Code PIN invalide";
+      return;
+    }
+    inputEl.value = "";
+    updateUI();
+  });
+
+  logoutBtn?.addEventListener("click", () => {
+    logoutRole();
+    updateUI();
+  });
+
+  updateUI();
+}
+
 async function init() {
+  setupRoleBar();
+
   if (inviteToken) {
     const inviteData = await loadPublicInvitation({ slug, qrToken: inviteToken });
     renderPublicInvite(inviteData);
