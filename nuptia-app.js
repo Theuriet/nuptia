@@ -66,7 +66,7 @@ async function sbFetch(path, options = {}) {
   return res.json();
 }
 
-async function getOrCreateWedding() {
+async function getOrCreateWedding(coupleNames = "A.Theuriet & Naomie M") {
   const existing = await sbFetch(`weddings?slug=eq.${encodeURIComponent(slug)}&select=*`);
   if (existing.length > 0) {
     return existing[0];
@@ -75,97 +75,112 @@ async function getOrCreateWedding() {
     method: "POST",
     body: JSON.stringify({
       slug,
-      couple_names: "A.Theuriet & Naomie M"
+      couple_names: coupleNames
     })
   });
   return created[0];
 }
 
-function setupSupabaseGuestForm() {
-  const nameInput = document.querySelector("#sb-guest-name");
-  const phoneInput = document.querySelector("#sb-guest-phone");
-  const tableInput = document.querySelector("#sb-guest-table");
-  const addBtn = document.querySelector("#sb-add-guest-btn");
-  const statusEl = document.querySelector("#sb-guest-status");
-  const linkBox = document.querySelector("#sb-guest-link-box");
+function extractLocalGuests() {
+  const results = [];
+  let coupleNames = "A.Theuriet & Naomie M";
 
-  addBtn?.addEventListener("click", async () => {
-    const fullName = nameInput?.value.trim();
-    const phone = phoneInput?.value.trim() || null;
-    const tableName = tableInput?.value.trim() || null;
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      const raw = localStorage.getItem(key);
+      if (!raw || (!raw.startsWith("{") && !raw.startsWith("["))) continue;
+      const parsed = JSON.parse(raw);
 
-    if (!fullName) {
-      if (statusEl) statusEl.textContent = "Entrez le nom de l'invité.";
-      return;
-    }
+      if (parsed?.couple_names) coupleNames = parsed.couple_names;
+      if (parsed?.wedding?.couple_names) coupleNames = parsed.wedding.couple_names;
+      if (Array.isArray(parsed?.weddings) && parsed.weddings[0]?.couple_names) {
+        coupleNames = parsed.weddings[0].couple_names;
+      }
 
-    try {
-      if (statusEl) statusEl.textContent = "Enregistrement dans Supabase...";
-      const wedding = await getOrCreateWedding();
+      const lists = [
+        Array.isArray(parsed) ? parsed : null,
+        parsed?.guests,
+        parsed?.wedding?.guests,
+        ...(Array.isArray(parsed?.weddings) ? parsed.weddings.map((w) => w.guests) : [])
+      ].filter(Array.isArray);
 
-      let tableId = null;
-      if (tableName) {
-        const foundTables = await sbFetch(
-          `tables?wedding_id=eq.${encodeURIComponent(wedding.id)}&name=eq.${encodeURIComponent(
-            tableName
-          )}&select=*`
-        );
-        if (foundTables.length > 0) {
-          tableId = foundTables[0].id;
-        } else {
-          const newTables = await sbFetch("tables", {
-            method: "POST",
-            body: JSON.stringify({
-              wedding_id: wedding.id,
-              name: tableName,
-              capacity: 10
-            })
-          });
-          tableId = newTables[0]?.id || null;
+      for (const list of lists) {
+        for (const g of list) {
+          if (!g || typeof g !== "object") continue;
+          const name = g.full_name || g.name || g.nom;
+          const token = g.qr_token || g.token || g.invite_token || g.code || (g.id ? String(g.id) : null);
+          if (name && token) {
+            results.push({
+              full_name: name,
+              phone: g.phone || g.tel || null,
+              qr_token: String(token),
+              table_name: g.table_name || g.table || null,
+              checked_in: Boolean(g.checked_in || g.checkedIn || g.present)
+            });
+          }
         }
       }
-
-      const token = `INV-${Date.now().toString(36).toUpperCase()}-${Math.random()
-        .toString(36)
-        .slice(2, 6)
-        .toUpperCase()}`;
-
-      const inserted = await sbFetch("guests", {
-        method: "POST",
-        body: JSON.stringify({
-          wedding_id: wedding.id,
-          table_id: tableId,
-          full_name: fullName,
-          phone,
-          qr_token: token,
-          checked_in: false
-        })
-      });
-
-      const guest = inserted[0];
-      const inviteUrl = `${window.location.origin}${window.location.pathname}?wedding=${encodeURIComponent(
-        wedding.slug
-      )}&invite=${encodeURIComponent(guest.qr_token)}`;
-
-      const waText = encodeURIComponent(
-        `Bonjour ${guest.full_name}, voici votre invitation pour le mariage de ${wedding.couple_names} : ${inviteUrl}`
-      );
-
-      if (statusEl) statusEl.textContent = `Enregistré dans Supabase : ${guest.full_name}`;
-      if (linkBox) {
-        linkBox.innerHTML = `
-          <p>Lien : <a href="${inviteUrl}" target="_blank" rel="noopener">${inviteUrl}</a></p>
-          <a href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">Envoyer sur WhatsApp</a>
-        `;
-      }
-
-      if (nameInput) nameInput.value = "";
-      if (phoneInput) phoneInput.value = "";
-      if (tableInput) tableInput.value = "";
-    } catch (err) {
-      if (statusEl) statusEl.textContent = `Erreur : ${err.message}`;
     }
-  });
+  } catch (_) {}
+
+  return { coupleNames, guests: results };
+}
+
+async function syncLocalGuestsToSupabase() {
+  const { coupleNames, guests } = extractLocalGuests();
+  if (guests.length === 0) return;
+
+  const wedding = await getOrCreateWedding(coupleNames);
+
+  for (const g of guests) {
+    const existing = await sbFetch(
+      `guests?qr_token=eq.${encodeURIComponent(g.qr_token)}&select=id`
+    );
+    if (existing.length > 0) continue;
+
+    let tableId = null;
+    if (g.table_name) {
+      const foundTables = await sbFetch(
+        `tables?wedding_id=eq.${encodeURIComponent(wedding.id)}&name=eq.${encodeURIComponent(
+          g.table_name
+        )}&select=id`
+      );
+      if (foundTables.length > 0) {
+        tableId = foundTables[0].id;
+      } else {
+        const createdTables = await sbFetch("tables", {
+          method: "POST",
+          body: JSON.stringify({
+            wedding_id: wedding.id,
+            name: g.table_name,
+            capacity: 10
+          })
+        });
+        tableId = createdTables[0]?.id || null;
+      }
+    }
+
+    await sbFetch("guests", {
+      method: "POST",
+      body: JSON.stringify({
+        wedding_id: wedding.id,
+        table_id: tableId,
+        full_name: g.full_name,
+        phone: g.phone,
+        qr_token: g.qr_token,
+        checked_in: g.checked_in
+      })
+    }).catch(() => {});
+  }
+}
+
+function watchLocalStorageChanges() {
+  const origSetItem = localStorage.setItem;
+  localStorage.setItem = function (...args) {
+    origSetItem.apply(this, args);
+    syncLocalGuestsToSupabase().catch(() => {});
+  };
 }
 
 async function loadPublicInviteData() {
@@ -276,7 +291,8 @@ function setupQrControls() {
 async function init() {
   setupRoleBar();
   setupQrControls();
-  setupSupabaseGuestForm();
+  watchLocalStorageChanges();
+  await syncLocalGuestsToSupabase();
 
   if (inviteToken) {
     const inviteData = await loadPublicInviteData();
