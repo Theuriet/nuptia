@@ -164,6 +164,9 @@ const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg';
 
+/* Code PIN du Gestionnaire (modifiable ici) */
+const OWNER_PIN = '2026';
+
 const SB_PUBLIC_URL = 'https://yreablulslmnnexoojek.supabase.co';
 const SB_PUBLIC_ANON = 'sb_publishable_3YNYOYJrO00k7VUqLfIhXw_0BFOHjN9';
 
@@ -208,7 +211,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Rôles séparés + Accueil terrain & partage.',
+    adminNote: 'NUPTIA V3 · Gestionnaire, Administrateur & Protocole.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -294,7 +297,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Separated roles + Event check-in & sharing.',
+    adminNote: 'NUPTIA V3 · Owner, Admin & Protocol roles.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -433,13 +436,14 @@ try {
   w.wishes = w.wishes || [];
 });
 
-let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '', role: 'admin' };
+let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '', role: 'owner', ownerUnlocked: true };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
   if (saved.url) cloudCfg.url = saved.url;
   if (saved.anonKey) cloudCfg.anonKey = saved.anonKey;
   if (saved.userEmail) cloudCfg.userEmail = saved.userEmail;
   if (saved.role) cloudCfg.role = saved.role;
+  if (typeof saved.ownerUnlocked === 'boolean') cloudCfg.ownerUnlocked = saved.ownerUnlocked;
 } catch (e) {}
 
 let supabaseClient = null;
@@ -448,40 +452,73 @@ let supabaseOnline = false;
 let checkinFilter = 'all';
 let shareMeta = { label: '', code: '' };
 
-function isProtocolRole() {
-  return cloudCfg.role === 'protocol';
+function saveCloudCfg() {
+  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
 }
 
-function isAdminAuthorized() {
-  return !isProtocolRole() && (Boolean(currentUser) || Boolean(cloudCfg.userEmail) || cloudCfg.role === 'admin');
+/* --- ROLES : owner (Gestionnaire/Développeur), admin (Administrateur), protocol (Protocole) --- */
+function getRole() {
+  if (cloudCfg.role === 'protocol') return 'protocol';
+  if (cloudCfg.role === 'admin') return 'admin';
+  return 'owner';
+}
+
+function isProtocolRole() {
+  return getRole() === 'protocol';
+}
+
+function isAdminRole() {
+  return getRole() === 'admin';
+}
+
+function isOwnerRole() {
+  return getRole() === 'owner';
+}
+
+function canSeeOverview() {
+  return isOwnerRole();
 }
 
 function canManageWeddings() {
-  return !isProtocolRole();
+  return isOwnerRole();
+}
+
+function canSeeSync() {
+  return isOwnerRole();
 }
 
 function canEditSettings() {
-  return !isProtocolRole();
+  return isOwnerRole() || isAdminRole();
 }
 
 function canAddOrDeleteGuests() {
-  return !isProtocolRole();
+  return isOwnerRole() || isAdminRole();
 }
 
 function canManageTables() {
-  return !isProtocolRole();
+  return isOwnerRole() || isAdminRole();
+}
+
+function canSeeStatsAndGuestbook() {
+  return isOwnerRole() || isAdminRole();
 }
 
 function canAccessPage(page) {
-  const protocolAllowed = ['guests', 'seating', 'checkin'];
-  if (isProtocolRole()) {
-    return protocolAllowed.includes(page);
+  const role = getRole();
+  if (role === 'protocol') {
+    return ['guests', 'seating', 'checkin'].includes(page);
+  }
+  if (role === 'admin') {
+    return ['settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook'].includes(page);
   }
   return ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'].includes(page);
 }
 
 function getDefaultPageForRole() {
-  return isProtocolRole() ? 'checkin' : 'overview';
+  const role = getRole();
+  if (role === 'protocol') return 'checkin';
+  if (role === 'admin') return 'guests';
+  return 'overview';
 }
 
 function mergeCloudWorkspace(remoteDb) {
@@ -566,7 +603,7 @@ function initSupabase() {
     if (supabaseClient && supabaseClient.auth && typeof supabaseClient.auth.getSession === 'function') {
       supabaseClient.auth.getSession().then(({ data }) => {
         currentUser = data?.session?.user || null;
-        if (currentUser) syncFromCloud(true);
+        if (currentUser && canSeeSync()) syncFromCloud(true);
       }).catch(() => {});
     }
   } catch (e) {
@@ -647,6 +684,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
 }
 
 async function sendWeddingToProtocol(wid) {
+  if (!canEditSettings()) return showToast('Action non autorisée pour ce rôle');
   const w = db.weddings.find(x => x.id === wid) || wedding();
   if (!w) return showToast('Aucun mariage sélectionné');
   db.selected = w.id;
@@ -732,7 +770,7 @@ async function applyProtocolUrlContext() {
   const roleParam = params.get('role');
   if (roleParam === 'protocol') {
     cloudCfg.role = 'protocol';
-    localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+    saveCloudCfg();
     if (wid) {
       db.selected = wid;
       const client = getDirectClient();
@@ -852,20 +890,27 @@ function formatDressCode(w) {
   return labels.join(' • ');
 }
 
+function roleLabelShort() {
+  const r = getRole();
+  if (r === 'protocol') return 'Protocole';
+  if (r === 'admin') return 'Administrateur';
+  return 'Gestionnaire';
+}
+
 function header() {
-  const roleBadge = isProtocolRole() ? 'Protocole' : 'Admin';
+  const badge = roleLabelShort();
   return `<header class="topbar">
     <div class="brand">
       <div class="brand-mark">N</div>
       <div>
         <div class="brand-name">NUPTIA</div>
-        <div class="brand-sub">Wedding experiences · V3 (${roleBadge})</div>
+        <div class="brand-sub">Wedding experiences · V3 (${badge})</div>
       </div>
     </div>
     <div class="top-actions">
-      ${!isProtocolRole() ? `<button id="top-sync-btn" class="btn sm ${supabaseOnline ? 'online-pill' : ''}" onclick="go('sync')" title="Synchronisation">
+      ${canSeeSync() ? `<button id="top-sync-btn" class="btn sm ${supabaseOnline ? 'online-pill' : ''}" onclick="go('sync')" title="Synchronisation">
         <span class="sync-dot ${supabaseOnline ? 'online' : ''}"></span>${supabaseOnline ? 'Supabase OK' : 'Local'}
-      </button>` : `<button class="btn ghost sm" onclick="openAdminAuthModal()">${roleBadge}</button>`}
+      </button>` : `<button class="btn ghost sm" onclick="openAdminAuthModal()">${badge}</button>`}
       <select class="lang" onchange="setLang(this.value)">
         <option value="fr" ${db.lang === 'fr' ? 'selected' : ''}>FR</option>
         <option value="en" ${db.lang === 'en' ? 'selected' : ''}>EN</option>
@@ -876,11 +921,13 @@ function header() {
 
 function bottomAuthBar() {
   const w = wedding();
-  if (isProtocolRole()) {
+  const r = getRole();
+
+  if (r === 'protocol') {
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <div class="small">Session terrain</div>
-        <strong style="font-size:13px">Mode Protocole actif (Accueil, Placement & Invités)</strong>
+        <strong style="font-size:13px">Mode Protocole actif (Invités, Plan de salle & Accueil & QR)</strong>
       </div>
       <div class="actions">
         ${w ? `<button class="btn sm" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser la liste</button>` : ''}
@@ -889,14 +936,27 @@ function bottomAuthBar() {
     </div>`;
   }
 
-  const adminStatus = currentUser
-    ? `Admin connecté (${esc(currentUser.email || '')})`
-    : (cloudCfg.userEmail ? `Admin (${esc(cloudCfg.userEmail)})` : 'Administrateur');
+  if (r === 'admin') {
+    return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <div class="small">Attributions Administrateur</div>
+        <strong style="font-size:13px">Gestion opérationnelle du mariage${w ? ' : ' + esc(w.couple) : ''}</strong>
+      </div>
+      <div class="actions">
+        ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
+        <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
+      </div>
+    </div>`;
+  }
+
+  const ownerStatus = currentUser
+    ? `Gestionnaire connecté (${esc(currentUser.email || '')})`
+    : 'Gestionnaire & Développeur';
 
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:24px">
     <div class="panel" style="margin:0;padding:16px 18px">
       <div class="small">Rôle & Protocole</div>
-      <strong style="font-size:13px;display:block;margin:4px 0 10px">${adminStatus}</strong>
+      <strong style="font-size:13px;display:block;margin:4px 0 10px">${ownerStatus}</strong>
       <div class="actions">
         ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
         <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
@@ -929,46 +989,90 @@ function shell(page, content) {
 
   $('#app').innerHTML = header() + `<div class="layout">
     <aside class="sidebar">
-      <div class="side-label">Espace actif · ${isProtocolRole() ? 'Protocole' : 'Admin'}</div>
-      ${w ? `<div class="active-wedding-badge"><span class="small">Mariage sélectionné</span><strong>${esc(w.couple)}</strong></div>` : ''}
+      <div class="side-label">Espace · ${roleLabelShort()}</div>
+      ${w ? `<div class="active-wedding-badge"><span class="small">Mariage actif</span><strong>${esc(w.couple)}</strong></div>` : ''}
       ${visibleNav.map(([k, i]) => `<button class="nav ${page === k ? 'active' : ''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}
     </aside>
     <main class="main">${content}${bottomAuthBar()}<div class="footer">${t('adminNote')}</div></main>
   </div>`;
 }
 
+function toggleOwnerPinField() {
+  const role = $('#auth-role')?.value;
+  const box = $('#owner-pin-box');
+  if (box) {
+    box.classList.toggle('hidden', role !== 'owner' || cloudCfg.ownerUnlocked);
+  }
+}
+
 function openAdminAuthModal() {
-  openModal('Autorisation & Rôle', `
+  const r = getRole();
+  const needsPin = r !== 'owner' && !cloudCfg.ownerUnlocked;
+  openModal('Rôle & Autorisation', `
     <div class="form-grid">
       <div class="field full">
-        <label>Rôle actif</label>
-        <select id="auth-role">
-          <option value="admin" ${!isProtocolRole() ? 'selected' : ''}>Administrateur (Contrôle complet)</option>
-          <option value="protocol" ${isProtocolRole() ? 'selected' : ''}>Protocole / Accueil (Terrain jour J)</option>
+        <label>Profil / Rôle</label>
+        <select id="auth-role" onchange="toggleOwnerPinField()">
+          <option value="owner" ${r === 'owner' ? 'selected' : ''}>Gestionnaire & Développeur (Vue globale & Sync)</option>
+          <option value="admin" ${r === 'admin' ? 'selected' : ''}>Administrateur (Attributions du mariage uniquement)</option>
+          <option value="protocol" ${r === 'protocol' ? 'selected' : ''}>Protocole (Invités, Plan de salle & Accueil & QR)</option>
         </select>
       </div>
-      <div class="field full">
-        <label>E-mail administrateur</label>
-        <input id="auth-email" type="email" value="${esc(cloudCfg.userEmail || '')}" placeholder="admin@exemple.com">
+      <div id="owner-pin-box" class="field full ${r === 'owner' && needsPin ? '' : (r === 'owner' && !cloudCfg.ownerUnlocked ? '' : 'hidden')}">
+        <label>Code PIN Gestionnaire</label>
+        <input id="auth-pin" type="password" inputmode="numeric" maxlength="12" placeholder="Entrez le code PIN gestionnaire">
+        <div class="small" style="margin-top:5px">Protège l’accès aux menus Gestionnaire. Si vous avez oublié votre code, utilisez la récupération ci-dessous.</div>
       </div>
       <div class="field full">
-        <label>Mot de passe Supabase (facultatif si session locale)</label>
+        <label>E-mail (facultatif)</label>
+        <input id="auth-email" type="email" value="${esc(cloudCfg.userEmail || '')}" placeholder="nom@exemple.com">
+      </div>
+      <div class="field full">
+        <label>Mot de passe Supabase (facultatif)</label>
         <input id="auth-pass" type="password" placeholder="••••••••">
       </div>
     </div>
-  `, 'applyAdminAuthFromModal()', 'Valider le rôle');
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="small">Besoin de récupérer l’accès Gestionnaire ?</span>
+      <button type="button" class="btn ghost sm" onclick="recoverOwnerAccess()">Récupérer l’accès Gestionnaire</button>
+    </div>
+  `, 'applyAdminAuthFromModal()', 'Valider');
+  if (r === 'owner' && !cloudCfg.ownerUnlocked) {
+    $('#owner-pin-box')?.classList.remove('hidden');
+  }
+}
+
+function recoverOwnerAccess() {
+  cloudCfg.ownerUnlocked = true;
+  cloudCfg.role = 'owner';
+  saveCloudCfg();
+  showToast('Accès Gestionnaire récupéré');
+  closeModal();
+  const nextPage = getDefaultPageForRole();
+  history.replaceState({ page: nextPage }, '', `#${nextPage}`);
+  render(nextPage);
 }
 
 async function applyAdminAuthFromModal() {
   const role = $('#auth-role').value;
   const email = $('#auth-email').value.trim();
   const pass = $('#auth-pass').value;
+  const pinInput = ($('#auth-pin')?.value || '').trim();
+
+  if (role === 'owner' && getRole() !== 'owner' && !cloudCfg.ownerUnlocked) {
+    if (pinInput !== OWNER_PIN) {
+      showToast('Code PIN gestionnaire incorrect');
+      return;
+    }
+    cloudCfg.ownerUnlocked = true;
+  }
+
   cloudCfg.role = role;
   if (email) cloudCfg.userEmail = email;
-  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  saveCloudCfg();
   initSupabase();
 
-  if (role === 'admin' && supabaseClient && email && pass) {
+  if (role === 'owner' && supabaseClient && email && pass) {
     try {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
       if (!error && data?.user) {
@@ -977,10 +1081,12 @@ async function applyAdminAuthFromModal() {
     } catch (e) {}
   }
 
-  showToast(`Rôle ${role === 'protocol' ? 'Protocole' : 'Administrateur'} activé`);
+  const labels = { owner: 'Gestionnaire', admin: 'Administrateur', protocol: 'Protocole' };
+  showToast(`Rôle ${labels[role] || role} activé`);
   closeModal();
-  const currentHash = location.hash.slice(1) || getDefaultPageForRole();
-  go(canAccessPage(currentHash) ? currentHash : getDefaultPageForRole());
+  const nextPage = getDefaultPageForRole();
+  history.replaceState({ page: nextPage }, '', `#${nextPage}`);
+  render(nextPage);
 }
 
 function render(page) {
@@ -1006,13 +1112,14 @@ function render(page) {
 }
 
 function dashboard() {
+  if (!canSeeOverview()) return go(getDefaultPageForRole());
   const gs = allGuests();
   const totalSeats = gs.reduce((a, g) => a + (Number(g.seats) || 1), 0);
   const w = wedding();
   shell('overview', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">NUPTIA / DASHBOARD</div>
+        <div class="eyebrow">NUPTIA / VUE D'ENSEMBLE (GESTIONNAIRE)</div>
         <h1 class="page-title">${t('welcome')}</h1>
         <div class="sub">${t('hello')}</div>
       </div>
@@ -1063,6 +1170,7 @@ function weddingCards() {
 }
 
 function weddingsPage() {
+  if (!canManageWeddings()) return go(getDefaultPageForRole());
   shell('weddings', `
     <div class="head-row">
       <div>
@@ -1070,7 +1178,7 @@ function weddingsPage() {
         <h1 class="page-title">${t('weddings')}</h1>
         <div class="sub">Créez, gérez ou supprimez en toute sécurité un espace distinct pour chaque couple.</div>
       </div>
-      ${canManageWeddings() ? `<button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>` : ''}
+      <button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>
     </div>
     ${weddingCards()}
   `);
@@ -1082,7 +1190,7 @@ function selectWedding(id) {
 }
 
 function confirmDeleteWedding(id) {
-  if (!canManageWeddings()) return showToast('Action réservée à l’administrateur');
+  if (!canManageWeddings()) return showToast('Action réservée au gestionnaire');
   const target = db.weddings.find(w => w.id === id);
   if (!target) return;
   openModal(
@@ -1110,24 +1218,24 @@ function deleteWedding(id) {
 }
 
 function settingsPage() {
-  if (!canEditSettings()) return go('checkin');
+  if (!canEditSettings()) return go(getDefaultPageForRole());
   const w = wedding();
   if (!w) {
-    shell('settings', `<div class="empty">Créez d'abord un espace de mariage pour le personnaliser.</div>`);
+    shell('settings', `<div class="empty">Aucun espace de mariage actif.</div>`);
     return;
   }
   const opts = DRESS_OPTIONS[db.lang] || DRESS_OPTIONS.fr;
   shell('settings', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">NUPTIA / PERSONNALISATION</div>
+        <div class="eyebrow">${esc(w.couple)} / PERSONNALISATION · ${roleLabelShort().toUpperCase()}</div>
         <h1 class="page-title">${esc(w.couple)}</h1>
-        <div class="sub">Configurez chaque détail de l’invitation depuis votre téléphone.</div>
+        <div class="sub">Configurez les informations et l’invitation de ce mariage.</div>
       </div>
       <div class="actions">
         <button class="btn gold" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>
         <button class="btn" onclick="publicLink('${w.id}')">Voir l’invitation ↗</button>
-        <button class="btn danger" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>
+        ${canManageWeddings() ? `<button class="btn danger" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>` : ''}
       </div>
     </div>
 
@@ -1281,7 +1389,7 @@ function removeWeddingMusic() {
 }
 
 function saveWeddingDetails() {
-  if (!canEditSettings()) return showToast('Action réservée à l’administrateur');
+  if (!canEditSettings()) return showToast('Action non autorisée');
   const w = wedding();
   w.couple = $('#ed-couple').value.trim() || w.couple;
   w.date = $('#ed-date').value;
@@ -1319,7 +1427,7 @@ function guestsPage() {
   shell('guests', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / GUESTS · ${isProtocolRole() ? 'PROTOCOLE' : 'ADMIN'}</div>
+        <div class="eyebrow">${esc(w.couple)} / GUESTS · ${roleLabelShort().toUpperCase()}</div>
         <h1 class="page-title">${t('guestTitle')}</h1>
         <div class="sub">${w.guests.length} invité(s) · ${w.guests.reduce((a, g) => a + g.seats, 0)} place(s)</div>
       </div>
@@ -1378,7 +1486,7 @@ function changeGuestStatus(gid, status) {
 }
 
 function removeGuest(gid) {
-  if (!canAddOrDeleteGuests()) return showToast('Suppression réservée à l’administrateur');
+  if (!canAddOrDeleteGuests()) return showToast('Suppression non autorisée');
   const w = wedding();
   w.guests = w.guests.filter(g => g.id !== gid);
   persist();
@@ -1415,7 +1523,7 @@ function seatingPage() {
   shell('seating', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / FLOOR PLAN · ${isProtocolRole() ? 'PROTOCOLE' : 'ADMIN'}</div>
+        <div class="eyebrow">${esc(w.couple)} / FLOOR PLAN · ${roleLabelShort().toUpperCase()}</div>
         <h1 class="page-title">${t('seatingTitle')}</h1>
         <div class="sub">Visualisez la disposition de la salle, la capacité de chaque table et les invités non encore placés.</div>
       </div>
@@ -1456,7 +1564,7 @@ function seatingPage() {
 }
 
 function removeTable(tid) {
-  if (!canManageTables()) return showToast('Action réservée à l’administrateur');
+  if (!canManageTables()) return showToast('Action non autorisée');
   const w = wedding();
   w.tables = w.tables.filter(tb => tb.id !== tid);
   w.guests.forEach(g => { if (g.tableId === tid) g.tableId = ''; });
@@ -1475,7 +1583,7 @@ function checkinPage() {
   shell('checkin', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / ARRIVALS · ${isProtocolRole() ? 'PROTOCOLE' : 'ADMIN'}</div>
+        <div class="eyebrow">${esc(w.couple)} / ARRIVALS · ${roleLabelShort().toUpperCase()}</div>
         <h1 class="page-title">${t('checkTitle')}</h1>
         <div class="sub">${t('checkHint')}</div>
       </div>
@@ -1505,6 +1613,7 @@ function checkinPage() {
 function setCheckinFilter(mode) {
   checkinFilter = mode;
   const q = $('#check-search') ? $('#check-search').value : '';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   render('checkin');
   if (q && $('#check-search')) {
     $('#check-search').value = q;
@@ -1552,9 +1661,9 @@ function toggleCheckIn(id, state) {
 }
 
 function statsPage() {
-  if (isProtocolRole()) return go('checkin');
+  if (!canSeeStatsAndGuestbook()) return go(getDefaultPageForRole());
   const w = wedding();
-  if (!w) return go('weddings');
+  if (!w) return go(getDefaultPageForRole());
   const gs = w.guests || [];
   const totalInvites = gs.length;
   const confirmed = gs.filter(g => g.status === 'confirmed');
@@ -1571,9 +1680,9 @@ function statsPage() {
   shell('stats', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / ANALYTICS</div>
+        <div class="eyebrow">${esc(w.couple)} / ANALYTICS · ${roleLabelShort().toUpperCase()}</div>
         <h1 class="page-title">${t('stats')}</h1>
-        <div class="sub">Suivi détaillé des confirmations, capacités et présences le jour J.</div>
+        <div class="sub">Suivi détaillé des confirmations, capacités et présences pour ce mariage.</div>
       </div>
       <button class="btn primary" onclick="exportGuestsCsv()">⤓ ${t('exportCsv')}</button>
     </div>
@@ -1600,7 +1709,7 @@ function statsPage() {
 }
 
 function exportGuestsCsv() {
-  if (isProtocolRole()) return showToast('Export réservé à l’administrateur');
+  if (!canSeeStatsAndGuestbook()) return showToast('Export non autorisé');
   const w = wedding();
   if (!w) return;
   const rows = [['Nom', 'Telephone', 'Places', 'Table', 'Statut', 'Code', 'Arrive']];
@@ -1618,14 +1727,14 @@ function exportGuestsCsv() {
 }
 
 function guestbookPage() {
-  if (isProtocolRole()) return go('checkin');
+  if (!canSeeStatsAndGuestbook()) return go(getDefaultPageForRole());
   const w = wedding();
-  if (!w) return go('weddings');
+  if (!w) return go(getDefaultPageForRole());
   const wishes = w.wishes || [];
   shell('guestbook', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / GUESTBOOK</div>
+        <div class="eyebrow">${esc(w.couple)} / GUESTBOOK · ${roleLabelShort().toUpperCase()}</div>
         <h1 class="page-title">${t('guestbookTitle')}</h1>
         <div class="sub">Messages laissés par vos proches depuis l’invitation numérique.</div>
       </div>
@@ -1645,7 +1754,7 @@ function guestbookPage() {
 }
 
 function deleteWish(wid) {
-  if (isProtocolRole()) return;
+  if (!canSeeStatsAndGuestbook()) return;
   const w = wedding();
   w.wishes = (w.wishes || []).filter(x => x.id !== wid);
   persist();
@@ -1653,13 +1762,13 @@ function deleteWish(wid) {
 }
 
 function syncPage() {
-  if (isProtocolRole()) return go('checkin');
+  if (!canSeeSync()) return go(getDefaultPageForRole());
   shell('sync', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">NUPTIA / CLOUD & BACKUP</div>
+        <div class="eyebrow">NUPTIA / CLOUD & BACKUP (GESTIONNAIRE)</div>
         <h1 class="page-title">Synchronisation & Sauvegarde</h1>
-        <div class="sub">Connexion au serveur cloud Supabase et sauvegarde des données de l’administrateur.</div>
+        <div class="sub">Connexion au serveur cloud Supabase et sauvegarde des données du gestionnaire.</div>
       </div>
     </div>
 
@@ -1678,10 +1787,10 @@ function syncPage() {
     </section>
 
     <section class="panel">
-      <h3>2. Compte Administrateur Cloud</h3>
-      <div class="section-note">Connectez-vous avec votre e-mail et mot de passe administrateur Supabase pour synchroniser l’espace complet.</div>
+      <h3>2. Compte Gestionnaire Cloud</h3>
+      <div class="section-note">Connectez-vous avec votre e-mail et mot de passe Supabase pour synchroniser l’espace complet.</div>
       <div class="form-grid" style="margin-top:12px">
-        <div class="field"><label>E-mail administrateur</label><input id="sb-email" type="email" value="${esc(cloudCfg.userEmail)}" placeholder="admin@exemple.com"></div>
+        <div class="field"><label>E-mail gestionnaire</label><input id="sb-email" type="email" value="${esc(cloudCfg.userEmail)}" placeholder="admin@exemple.com"></div>
         <div class="field"><label>Mot de passe</label><input id="sb-pass" type="password" placeholder="••••••••"></div>
       </div>
       <div class="actions" style="margin-top:12px">
@@ -1691,7 +1800,7 @@ function syncPage() {
         ${currentUser ? `<button class="btn danger" onclick="signOutAdmin()">Déconnexion</button>` : ''}
       </div>
       <div class="small" style="margin-top:10px">
-        Statut session : <strong>${currentUser ? 'Administrateur authentifié (' + esc(currentUser.email || '') + ')' : 'Session locale active'}</strong>
+        Statut session : <strong>${currentUser ? 'Gestionnaire authentifié (' + esc(currentUser.email || '') + ')' : 'Session locale active'}</strong>
       </div>
     </section>
 
@@ -1707,9 +1816,10 @@ function syncPage() {
 }
 
 async function saveSupabaseConfig() {
+  if (!canSeeSync()) return;
   cloudCfg.url = $('#sb-url').value.trim();
   cloudCfg.anonKey = $('#sb-key').value.trim();
-  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  saveCloudCfg();
   initSupabase();
   const ok = await syncDirectTablesToSupabase();
   showToast(ok ? 'Connecté à Supabase et synchronisé' : 'Connexion testée : vérifiez les tables ou la clé');
@@ -1717,11 +1827,12 @@ async function saveSupabaseConfig() {
 }
 
 async function signInAdmin() {
+  if (!canSeeSync()) return;
   cloudCfg.url = $('#sb-url').value.trim();
   cloudCfg.anonKey = $('#sb-key').value.trim();
-  cloudCfg.role = 'admin';
+  cloudCfg.role = 'owner';
   cloudCfg.userEmail = $('#sb-email').value.trim();
-  localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+  saveCloudCfg();
   initSupabase();
   const password = $('#sb-pass').value;
 
@@ -1736,7 +1847,7 @@ async function signInAdmin() {
         return;
       }
       currentUser = data?.user || null;
-      showToast('Connecté en tant qu’administrateur');
+      showToast('Connecté en tant que gestionnaire');
       await syncFromCloud(true);
       await verifySupabaseConnection();
       render('sync');
@@ -1749,10 +1860,10 @@ async function signInAdmin() {
 
   if (cloudCfg.userEmail) {
     await syncDirectTablesToSupabase();
-    showToast('E-mail administrateur enregistré');
+    showToast('E-mail gestionnaire enregistré');
     render('sync');
   } else {
-    showToast('Renseignez l’e-mail et le mot de passe administrateur');
+    showToast('Renseignez l’e-mail et le mot de passe');
   }
 }
 
@@ -1786,7 +1897,7 @@ async function pushToCloud(manual) {
 
 async function syncFromCloud(silent) {
   if (!supabaseClient || !currentUser) {
-    if (!silent) showToast('Connectez-vous d’abord en administrateur');
+    if (!silent) showToast('Connectez-vous d’abord');
     return;
   }
   try {
@@ -1806,6 +1917,7 @@ async function syncFromCloud(silent) {
 }
 
 function downloadBackup() {
+  if (!canSeeSync()) return showToast('Action réservée au gestionnaire');
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1815,6 +1927,7 @@ function downloadBackup() {
 }
 
 function restoreBackup(input) {
+  if (!canSeeSync()) return showToast('Action réservée au gestionnaire');
   const file = input.files && input.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -1851,7 +1964,7 @@ function closeModal() {
 }
 
 function openWeddingModal() {
-  if (!canManageWeddings()) return showToast('Action réservée à l’administrateur');
+  if (!canManageWeddings()) return showToast('Action réservée au gestionnaire');
   openModal(t('createTitle'), `
     <div class="form-grid">
       <div class="field full"><label>${t('couple')}</label><input id="f-couple" placeholder="Ex. Theuriet & Naomi"></div>
@@ -1902,7 +2015,7 @@ function saveWedding() {
 }
 
 function openGuestModal() {
-  if (!canAddOrDeleteGuests()) return showToast('Action réservée à l’administrateur');
+  if (!canAddOrDeleteGuests()) return showToast('Action non autorisée');
   openModal(t('addGuest'), `
     <div class="form-grid">
       <div class="field full"><label>${t('guestName')}</label><input id="f-name" placeholder="Jean & Marie"></div>
@@ -1937,7 +2050,7 @@ function saveGuest() {
 }
 
 function openTableModal() {
-  if (!canManageTables()) return showToast('Action réservée à l’administrateur');
+  if (!canManageTables()) return showToast('Action non autorisée');
   openModal(t('addTable'), `
     <div class="form-grid">
       <div class="field"><label>${t('tableName')}</label><input id="f-tname" placeholder="Table 04"></div>
