@@ -1005,14 +1005,6 @@ function bottomAuthBar() {
 
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:24px">
     <div class="panel" style="margin:0;padding:16px 18px">
-      <div class="small">Rôle & Protocole</div>
-      <strong style="font-size:13px;display:block;margin:4px 0 10px">Gestionnaire & Développeur</strong>
-      <div class="actions">
-        ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
-        <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
-      </div>
-    </div>
-    <div class="panel" style="margin:0;padding:16px 18px">
       <div class="small">Synchronisation Cloud</div>
       <strong style="font-size:13px;display:block;margin:4px 0 10px">${supabaseOnline ? 'Connecté à Supabase' : 'Mode hors-ligne / Local'}</strong>
       <div class="actions">
