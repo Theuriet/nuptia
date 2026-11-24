@@ -458,19 +458,17 @@ try {
   w.wishes = w.wishes || [];
 });
 
-let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '', role: 'owner', ownerUnlocked: true, activeProtocolId: '' };
+let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, role: 'owner', ownerUnlocked: true, activeProtocolId: '' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
   if (saved.url) cloudCfg.url = saved.url;
   if (saved.anonKey) cloudCfg.anonKey = saved.anonKey;
-  if (saved.userEmail) cloudCfg.userEmail = saved.userEmail;
   if (saved.role) cloudCfg.role = saved.role;
   if (typeof saved.ownerUnlocked === 'boolean') cloudCfg.ownerUnlocked = saved.ownerUnlocked;
   if (saved.activeProtocolId) cloudCfg.activeProtocolId = saved.activeProtocolId;
 } catch (e) {}
 
 let supabaseClient = null;
-let currentUser = null;
 let supabaseOnline = false;
 let checkinFilter = 'all';
 let protocolZoneFilter = 'all';
@@ -634,12 +632,6 @@ async function verifySupabaseConnection() {
 function initSupabase() {
   try {
     supabaseClient = getDirectClient();
-    if (supabaseClient && supabaseClient.auth && typeof supabaseClient.auth.getSession === 'function') {
-      supabaseClient.auth.getSession().then(({ data }) => {
-        currentUser = data?.session?.user || null;
-        if (currentUser && canSeeSync()) syncFromCloud(true);
-      }).catch(() => {});
-    }
   } catch (e) {
     supabaseClient = null;
   }
@@ -880,9 +872,6 @@ function persist(skipCloud) {
   }
   if (!skipCloud) {
     syncDirectTablesToSupabase();
-    if (supabaseClient && currentUser && canManageWeddings()) {
-      pushToCloud();
-    }
   }
 }
 
@@ -986,14 +975,10 @@ function bottomAuthBar() {
     </div>`;
   }
 
-  const ownerStatus = currentUser
-    ? `Gestionnaire connecté (${esc(currentUser.email || '')})`
-    : 'Gestionnaire & Développeur';
-
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:24px">
     <div class="panel" style="margin:0;padding:16px 18px">
       <div class="small">Rôle & Protocole</div>
-      <strong style="font-size:13px;display:block;margin:4px 0 10px">${ownerStatus}</strong>
+      <strong style="font-size:13px;display:block;margin:4px 0 10px">Gestionnaire & Développeur</strong>
       <div class="actions">
         ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
         <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
@@ -1956,7 +1941,7 @@ function syncPage() {
       <div>
         <div class="eyebrow">NUPTIA / CLOUD & BACKUP (GESTIONNAIRE)</div>
         <h1 class="page-title">Synchronisation & Sauvegarde</h1>
-        <div class="sub">Connexion au serveur cloud Supabase et sauvegarde des données du gestionnaire.</div>
+        <div class="sub">Connexion au serveur cloud Supabase et sauvegarde manuelle de vos données.</div>
       </div>
     </div>
 
@@ -1968,6 +1953,7 @@ function syncPage() {
       </div>
       <div class="actions" style="margin-top:12px">
         <button class="btn primary" onclick="saveSupabaseConfig()">Enregistrer et tester la connexion</button>
+        <button class="btn" onclick="syncDirectTablesToSupabase().then(ok => showToast(ok ? 'Données synchronisées avec Supabase' : 'Vérifiez la connexion Supabase'))">↻ Synchroniser maintenant</button>
       </div>
       <div class="small" style="margin-top:10px">
         État serveur : <strong style="color:${supabaseOnline ? 'var(--green)' : 'var(--red)'}">${supabaseOnline ? 'Connecté (Supabase OK)' : 'Non connecté (Mode local)'}</strong>
@@ -1975,25 +1961,7 @@ function syncPage() {
     </section>
 
     <section class="panel">
-      <h3>2. Compte Gestionnaire Cloud</h3>
-      <div class="section-note">Connectez-vous avec votre e-mail et mot de passe Supabase pour synchroniser l’espace complet.</div>
-      <div class="form-grid" style="margin-top:12px">
-        <div class="field"><label>E-mail gestionnaire</label><input id="sb-email" type="email" value="${esc(cloudCfg.userEmail)}" placeholder="admin@exemple.com"></div>
-        <div class="field"><label>Mot de passe</label><input id="sb-pass" type="password" placeholder="••••••••"></div>
-      </div>
-      <div class="actions" style="margin-top:12px">
-        <button class="btn gold" onclick="signInAdmin()">Se connecter</button>
-        <button class="btn" onclick="pushToCloud(true)">Envoyer vers le cloud</button>
-        <button class="btn" onclick="syncFromCloud(false)">Récupérer depuis le cloud</button>
-        ${currentUser ? `<button class="btn danger" onclick="signOutAdmin()">Déconnexion</button>` : ''}
-      </div>
-      <div class="small" style="margin-top:10px">
-        Statut session : <strong>${currentUser ? 'Gestionnaire authentifié (' + esc(currentUser.email || '') + ')' : 'Session locale active'}</strong>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h3>3. Sauvegarde et restauration manuelle (Fichier JSON)</h3>
+      <h3>2. Sauvegarde et restauration manuelle (Fichier JSON)</h3>
       <div class="section-note">Téléchargez une sauvegarde complète de tous vos mariages ou restaurez-la sur un autre téléphone.</div>
       <div class="actions" style="margin-top:12px">
         <button class="btn" onclick="downloadBackup()">⤓ Télécharger la sauvegarde (.json)</button>
@@ -2012,96 +1980,6 @@ async function saveSupabaseConfig() {
   const ok = await syncDirectTablesToSupabase();
   showToast(ok ? 'Connecté à Supabase et synchronisé' : 'Connexion testée : vérifiez les tables ou la clé');
   render('sync');
-}
-
-async function signInAdmin() {
-  if (!canSeeSync()) return;
-  cloudCfg.url = $('#sb-url').value.trim();
-  cloudCfg.anonKey = $('#sb-key').value.trim();
-  cloudCfg.role = 'owner';
-  cloudCfg.userEmail = $('#sb-email').value.trim();
-  saveCloudCfg();
-  initSupabase();
-  const password = $('#sb-pass').value;
-
-  if (supabaseClient && cloudCfg.userEmail && password) {
-    try {
-      const { data, error } = await supabaseClient.auth.signInWithPassword({
-        email: cloudCfg.userEmail,
-        password
-      });
-      if (error) {
-        showToast('Connexion impossible : ' + error.message);
-        return;
-      }
-      currentUser = data?.user || null;
-      showToast('Connecté en tant que gestionnaire');
-      await syncFromCloud(true);
-      await verifySupabaseConnection();
-      render('sync');
-      return;
-    } catch (e) {
-      showToast('Erreur de connexion');
-      return;
-    }
-  }
-
-  if (cloudCfg.userEmail) {
-    await syncDirectTablesToSupabase();
-    showToast('E-mail gestionnaire enregistré');
-    render('sync');
-  } else {
-    showToast('Renseignez l’e-mail et le mot de passe');
-  }
-}
-
-async function signOutAdmin() {
-  try {
-    if (supabaseClient?.auth) await supabaseClient.auth.signOut();
-  } catch (e) {}
-  currentUser = null;
-  showToast('Déconnecté');
-  render('sync');
-}
-
-async function pushToCloud(manual) {
-  await syncDirectTablesToSupabase();
-  if (!supabaseClient || !currentUser) {
-    if (manual) showToast(supabaseOnline ? 'Tables synchronisées avec Supabase' : 'Hors-ligne : vérifiez la connexion Supabase');
-    return;
-  }
-  try {
-    const { error } = await supabaseClient.from('nuptia_workspaces').upsert({
-      user_id: currentUser.id,
-      payload: db,
-      updated_at: new Date().toISOString()
-    });
-    if (error && manual) showToast('Erreur sync : ' + error.message);
-    else if (manual) showToast('Données synchronisées vers le cloud !');
-  } catch (e) {
-    if (manual) showToast('Erreur lors de l’envoi');
-  }
-}
-
-async function syncFromCloud(silent) {
-  if (!supabaseClient || !currentUser) {
-    if (!silent) showToast('Connectez-vous d’abord');
-    return;
-  }
-  try {
-    const { data, error } = await supabaseClient.from('nuptia_workspaces').select('payload').eq('user_id', currentUser.id).maybeSingle();
-    if (error) {
-      if (!silent) showToast(error.message);
-      return;
-    }
-    if (data && data.payload && Array.isArray(data.payload.weddings)) {
-      db = mergeCloudWorkspace(data.payload);
-      persist(true);
-      if (!silent) showToast('Données fusionnées et récupérées depuis le cloud !');
-    } else {
-      await pushToCloud(false);
-    }
-  } catch (e) {}
 }
 
 function downloadBackup() {
