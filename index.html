@@ -131,10 +131,8 @@ tr:last-child td{border-bottom:0}
 
 @media(max-width:860px){
   .layout{grid-template-columns:1fr}
-  .sidebar{display:flex;overflow:auto;padding:8px 12px;border-right:0;border-bottom:1px solid var(--line);gap:4px;align-items:center}
-  .side-label{display:none}
-  .active-wedding-badge{display:flex;align-items:center;gap:8px;margin:0 6px 0 0;padding:6px 10px;white-space:nowrap}
-  .active-wedding-badge strong{display:inline;font-size:13px;margin-top:0}
+  .sidebar{display:flex;overflow:auto;padding:8px 12px;border-right:0;border-bottom:1px solid var(--line);gap:4px}
+  .side-label,.active-wedding-badge{display:none}
   .nav{white-space:nowrap;width:auto;padding:9px 11px}
   .nav .ico{width:auto}
   .main{padding:20px 15px}
@@ -901,18 +899,6 @@ function go(page) {
   render(safePage);
 }
 
-function enterAdminForWedding(wid) {
-  if (wid) {
-    db.selected = wid;
-    persist(true);
-  }
-  cloudCfg.role = 'admin';
-  cloudCfg.ownerUnlocked = false;
-  saveCloudCfg();
-  showToast('Espace Administrateur (Organisateur) ouvert');
-  go('protocols');
-}
-
 function buildMapLink(w) {
   if (w.gpsLat && w.gpsLng) {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(w.gpsLat + ',' + w.gpsLng)}`;
@@ -958,27 +944,15 @@ function header() {
   </header>`;
 }
 
-function bottomAuthBar(page) {
+function bottomAuthBar() {
   const w = wedding();
   const r = getRole();
-
-  if (page === 'overview' && isOwnerRole()) {
-    return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-      <div>
-        <div class="small">Synchronisation Cloud</div>
-        <strong style="font-size:13px">${supabaseOnline ? 'Connecté à Supabase' : 'Mode hors-ligne / Local'}</strong>
-      </div>
-      <div class="actions">
-        <button class="btn sm" onclick="go('sync')">Ouvrir Synchronisation</button>
-      </div>
-    </div>`;
-  }
 
   if (r === 'protocol') {
     const activeProt = (w?.protocols || []).find(p => p.id === cloudCfg.activeProtocolId);
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
-        <div class="small">Session terrain · Espace mariage${w ? ' : ' + esc(w.couple) : ''}</div>
+        <div class="small">Session terrain</div>
         <strong style="font-size:13px">Mode Protocole actif${activeProt ? ' — ' + esc(activeProt.name) + ' (' + esc(getZoneLabel(activeProt.zone)) + ')' : ''}</strong>
       </div>
       <div class="actions">
@@ -991,8 +965,8 @@ function bottomAuthBar(page) {
   if (r === 'admin') {
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
-        <div class="small">Espace mariage · Administrateur (Organisateur)</div>
-        <strong style="font-size:13px">${w ? esc(w.couple) : 'Mariage'} · ${(w?.protocols || []).length} protocole(s)</strong>
+        <div class="small">Attributions Administrateur</div>
+        <strong style="font-size:13px">Gestion opérationnelle du mariage${w ? ' : ' + esc(w.couple) : ''} · ${(w?.protocols || []).length} protocole(s)</strong>
       </div>
       <div class="actions">
         ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
@@ -1003,8 +977,8 @@ function bottomAuthBar(page) {
 
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:24px">
     <div class="panel" style="margin:0;padding:16px 18px">
-      <div class="small">Espace mariage & Rôles</div>
-      <strong style="font-size:13px;display:block;margin:4px 0 10px">${w ? esc(w.couple) : 'Gestionnaire & Développeur'}</strong>
+      <div class="small">Rôle & Protocole</div>
+      <strong style="font-size:13px;display:block;margin:4px 0 10px">Gestionnaire & Développeur</strong>
       <div class="actions">
         ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
         <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
@@ -1039,13 +1013,10 @@ function shell(page, content) {
   $('#app').innerHTML = header() + `<div class="layout">
     <aside class="sidebar">
       <div class="side-label">Espace · ${roleLabelShort()}</div>
-      ${w ? `<div class="active-wedding-badge">
-        <div><span class="small">Espace mariage</span><strong>${esc(w.couple)}</strong></div>
-        <button type="button" class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
-      </div>` : ''}
+      ${w ? `<div class="active-wedding-badge"><span class="small">Mariage actif</span><strong>${esc(w.couple)}</strong></div>` : ''}
       ${visibleNav.map(([k, i]) => `<button class="nav ${page === k ? 'active' : ''}" onclick="go('${k}')"><span class="ico">${i}</span>${t(k)}</button>`).join('')}
     </aside>
-    <main class="main">${content}${bottomAuthBar(page)}<div class="footer">${t('adminNote')}</div></main>
+    <main class="main">${content}${bottomAuthBar()}<div class="footer">${t('adminNote')}</div></main>
   </div>`;
 }
 
@@ -1070,7 +1041,7 @@ function openAdminAuthModal() {
         <label>Profil / Rôle</label>
         <select id="auth-role" onchange="toggleOwnerPinField()">
           <option value="owner" ${r === 'owner' ? 'selected' : ''}>Gestionnaire & Développeur (Vue globale & Sync)</option>
-          <option value="admin" ${r === 'admin' ? 'selected' : ''}>Administrateur / Organisateur (Attributions & Équipe Protocole)</option>
+          <option value="admin" ${r === 'admin' ? 'selected' : ''}>Administrateur (Attributions & Équipe Protocole)</option>
           <option value="protocol" ${r === 'protocol' ? 'selected' : ''}>Protocole (Invités, Plan de salle & Accueil & QR)</option>
         </select>
       </div>
@@ -1316,6 +1287,7 @@ function dashboard() {
   if (!canSeeOverview()) return go(getDefaultPageForRole());
   const gs = allGuests();
   const totalSeats = gs.reduce((a, g) => a + (Number(g.seats) || 1), 0);
+  const w = wedding();
   shell('overview', `
     <div class="head-row">
       <div>
@@ -1324,6 +1296,7 @@ function dashboard() {
         <div class="sub">${t('hello')}</div>
       </div>
       <div class="actions">
+        ${w && canManageWeddings() ? `<button class="btn gold" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
         ${canManageWeddings() ? `<button class="btn primary" onclick="openWeddingModal()">＋ ${t('newWedding')}</button>` : ''}
       </div>
     </div>
@@ -1359,7 +1332,7 @@ function weddingCards() {
         <div class="actions">
           ${canEditSettings() ? `<button class="btn primary sm" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button>` : ''}
           <button class="btn sm" onclick="selectWedding('${w.id}');go('guests')">${t('open')}</button>
-          ${isOwnerRole() ? `<button class="btn gold sm" onclick="enterAdminForWedding('${w.id}')">Administrateur (Organisateur)</button>` : ''}
+          ${!isProtocolRole() ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Protocole</button>` : ''}
           <button class="btn sm" onclick="publicLink('${w.id}')">${t('view')}</button>
           ${canManageWeddings() ? `<button class="btn danger sm" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>` : ''}
         </div>
