@@ -1066,16 +1066,8 @@ function openAdminAuthModal() {
         <div id="auth-pin-err" class="small" style="color:var(--red);margin-top:5px"></div>
         <div class="small" style="margin-top:5px">Protège l’accès aux menus Gestionnaire. Si vous avez oublié votre code, utilisez la récupération ci-dessous.</div>
       </div>
-      <div class="field full">
-        <label>E-mail (facultatif)</label>
-        <input id="auth-email" type="email" value="${esc(cloudCfg.userEmail || '')}" placeholder="nom@exemple.com">
-      </div>
-      <div class="field full">
-        <label>Mot de passe Supabase (facultatif)</label>
-        <input id="auth-pass" type="password" placeholder="••••••••">
-      </div>
     </div>
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
       <span class="small">Besoin de récupérer l’accès Gestionnaire ?</span>
       <button type="button" class="btn ghost sm" onclick="recoverOwnerAccess()">Récupérer l’accès Gestionnaire</button>
     </div>
@@ -1096,8 +1088,6 @@ function recoverOwnerAccess() {
 async function applyAdminAuthFromModal() {
   const currentR = getRole();
   const role = $('#auth-role').value;
-  const email = $('#auth-email').value.trim();
-  const pass = $('#auth-pass').value;
   const pinInput = ($('#auth-pin')?.value || '').trim();
 
   if (role === 'owner' && currentR !== 'owner') {
@@ -1113,18 +1103,8 @@ async function applyAdminAuthFromModal() {
   }
 
   cloudCfg.role = role;
-  if (email) cloudCfg.userEmail = email;
   saveCloudCfg();
   initSupabase();
-
-  if (role === 'owner' && supabaseClient && email && pass) {
-    try {
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
-      if (!error && data?.user) {
-        currentUser = data.user;
-      }
-    } catch (e) {}
-  }
 
   const labels = { owner: 'Gestionnaire', admin: 'Administrateur', protocol: 'Protocole' };
   showToast(`Rôle ${labels[role] || role} activé`);
