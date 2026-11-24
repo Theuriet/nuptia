@@ -167,6 +167,21 @@ const cloudCfgKey = 'nuptia_supabase_cfg';
 /* Code PIN du Gestionnaire (modifiable ici) */
 const OWNER_PIN = '2026';
 
+const PROTOCOL_ZONES = {
+  fr: [
+    { id: 'accueil_qr', label: 'Accueil & Contrôle QR' },
+    { id: 'placement_tables', label: 'Placement & Tables' },
+    { id: 'vip_famille', label: 'VIP & Famille d’honneur' },
+    { id: 'coordination_salle', label: 'Coordination salle & cortège' }
+  ],
+  en: [
+    { id: 'accueil_qr', label: 'Welcome & QR Check-in' },
+    { id: 'placement_tables', label: 'Seating & Tables' },
+    { id: 'vip_famille', label: 'VIP & Family' },
+    { id: 'coordination_salle', label: 'Hall & Procession' }
+  ]
+};
+
 const SB_PUBLIC_URL = 'https://yreablulslmnnexoojek.supabase.co';
 const SB_PUBLIC_ANON = 'sb_publishable_3YNYOYJrO00k7VUqLfIhXw_0BFOHjN9';
 
@@ -196,6 +211,7 @@ const translations = {
     settings: 'Personnalisation',
     guests: 'Invités',
     seating: 'Plan de salle',
+    protocols: 'Équipe Protocole',
     checkin: 'Accueil & QR',
     stats: 'Statistiques',
     guestbook: 'Livre d’or',
@@ -282,6 +298,7 @@ const translations = {
     settings: 'Customize',
     guests: 'Guests',
     seating: 'Floor Plan',
+    protocols: 'Protocol Team',
     checkin: 'Check-in & QR',
     stats: 'Statistics',
     guestbook: 'Guestbook',
@@ -389,6 +406,10 @@ function initial() {
         program: '',
         websiteNote: '',
         message: 'C’est avec une immense joie et une profonde gratitude envers Dieu que nous avons le plaisir de vous annoncer notre union. Nous serions honorés de vous compter parmi ceux qui partageront avec nous ce moment précieux de notre histoire.',
+        protocols: [
+          { id: 'p1', name: 'Équipe Accueil Principal', phone: '+243', zone: 'accueil_qr', active: true },
+          { id: 'p2', name: 'Équipe Placement Salle', phone: '+243', zone: 'placement_tables', active: true }
+        ],
         tables: [
           { id: 't1', name: 'Table 01 — Honneur', capacity: 8 },
           { id: 't2', name: 'Table 02 — Famille', capacity: 8 },
@@ -431,12 +452,13 @@ try {
   w.program = w.program || '';
   w.websiteNote = w.websiteNote || '';
   w.message = w.message || translations[db.lang || 'fr'].welcomeText;
+  w.protocols = Array.isArray(w.protocols) ? w.protocols : [];
   w.guests = w.guests || [];
   w.tables = w.tables || [];
   w.wishes = w.wishes || [];
 });
 
-let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '', role: 'owner', ownerUnlocked: true };
+let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, userEmail: '', role: 'owner', ownerUnlocked: true, activeProtocolId: '' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
   if (saved.url) cloudCfg.url = saved.url;
@@ -444,16 +466,23 @@ try {
   if (saved.userEmail) cloudCfg.userEmail = saved.userEmail;
   if (saved.role) cloudCfg.role = saved.role;
   if (typeof saved.ownerUnlocked === 'boolean') cloudCfg.ownerUnlocked = saved.ownerUnlocked;
+  if (saved.activeProtocolId) cloudCfg.activeProtocolId = saved.activeProtocolId;
 } catch (e) {}
 
 let supabaseClient = null;
 let currentUser = null;
 let supabaseOnline = false;
 let checkinFilter = 'all';
+let protocolZoneFilter = 'all';
 let shareMeta = { label: '', code: '' };
 
 function saveCloudCfg() {
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
+}
+
+function getZoneLabel(zoneId) {
+  const list = PROTOCOL_ZONES[db.lang] || PROTOCOL_ZONES.fr;
+  return list.find(z => z.id === zoneId)?.label || 'Accueil & Contrôle QR';
 }
 
 /* --- ROLES : owner (Gestionnaire/Développeur), admin (Administrateur), protocol (Protocole) --- */
@@ -499,6 +528,10 @@ function canManageTables() {
   return isOwnerRole() || isAdminRole();
 }
 
+function canManageProtocols() {
+  return isOwnerRole() || isAdminRole();
+}
+
 function canSeeStatsAndGuestbook() {
   return isOwnerRole() || isAdminRole();
 }
@@ -509,9 +542,9 @@ function canAccessPage(page) {
     return ['guests', 'seating', 'checkin'].includes(page);
   }
   if (role === 'admin') {
-    return ['settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook'].includes(page);
+    return ['settings', 'guests', 'seating', 'protocols', 'checkin', 'stats', 'guestbook'].includes(page);
   }
-  return ['overview', 'weddings', 'settings', 'guests', 'seating', 'checkin', 'stats', 'guestbook', 'sync'].includes(page);
+  return ['overview', 'weddings', 'settings', 'guests', 'seating', 'protocols', 'checkin', 'stats', 'guestbook', 'sync'].includes(page);
 }
 
 function getDefaultPageForRole() {
@@ -526,7 +559,7 @@ function mergeCloudWorkspace(remoteDb) {
   const localMap = new Map((db.weddings || []).map(w => [w.id, w]));
   const mergedWeddings = remoteDb.weddings.map(rw => {
     const lw = localMap.get(rw.id);
-    if (!lw) return rw;
+    if (!lw) return { ...rw, protocols: rw.protocols || [] };
     const localGuests = new Map((lw.guests || []).map(g => [g.token, g]));
     const mergedGuests = (rw.guests || []).map(rg => {
       const lg = localGuests.get(rg.token);
@@ -545,6 +578,7 @@ function mergeCloudWorkspace(remoteDb) {
     });
     return {
       ...rw,
+      protocols: (rw.protocols && rw.protocols.length) ? rw.protocols : (lw.protocols || []),
       guests: mergedGuests,
       tables: (rw.tables && rw.tables.length) ? rw.tables : (lw.tables || []),
       wishes: (rw.wishes && rw.wishes.length) ? rw.wishes : (lw.wishes || [])
@@ -694,7 +728,7 @@ async function sendWeddingToProtocol(wid) {
   shareMeta = { label: `Accès Protocole (${w.couple})`, code: '' };
   openModal('Envoyer au Protocole', `
     <p style="line-height:1.65;margin-top:0">
-      Les invités, places, tables et codes de <strong>${esc(w.couple)}</strong> sont prêts pour l’équipe Protocole.
+      Les invités, places, tables et codes de <strong>${esc(w.couple)}</strong> sont prêts pour l’équipe Protocole (${(w.protocols || []).length} membre(s) enregistré(s)).
     </p>
     <div class="field"><label>Lien d’accès Protocole (jour J)</label><input id="share-url" value="${esc(url)}" readonly></div>
     <div class="notice">Quand l’équipe protocole ouvre ce lien sur son téléphone, elle accède uniquement à l’accueil terrain et au placement.</div>
@@ -770,6 +804,7 @@ async function applyProtocolUrlContext() {
   const roleParam = params.get('role');
   if (roleParam === 'protocol') {
     cloudCfg.role = 'protocol';
+    cloudCfg.ownerUnlocked = false;
     saveCloudCfg();
     if (wid) {
       db.selected = wid;
@@ -805,6 +840,7 @@ async function applyProtocolUrlContext() {
                 dressCode: wData.dress_code || '',
                 program: wData.program || '',
                 websiteNote: wData.website_note || '',
+                protocols: [],
                 tables: [],
                 guests: [],
                 wishes: []
@@ -924,10 +960,11 @@ function bottomAuthBar() {
   const r = getRole();
 
   if (r === 'protocol') {
+    const activeProt = (w?.protocols || []).find(p => p.id === cloudCfg.activeProtocolId);
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <div class="small">Session terrain</div>
-        <strong style="font-size:13px">Mode Protocole actif (Invités, Plan de salle & Accueil & QR)</strong>
+        <strong style="font-size:13px">Mode Protocole actif${activeProt ? ' — ' + esc(activeProt.name) + ' (' + esc(getZoneLabel(activeProt.zone)) + ')' : ''}</strong>
       </div>
       <div class="actions">
         ${w ? `<button class="btn sm" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser la liste</button>` : ''}
@@ -940,7 +977,7 @@ function bottomAuthBar() {
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
         <div class="small">Attributions Administrateur</div>
-        <strong style="font-size:13px">Gestion opérationnelle du mariage${w ? ' : ' + esc(w.couple) : ''}</strong>
+        <strong style="font-size:13px">Gestion opérationnelle du mariage${w ? ' : ' + esc(w.couple) : ''} · ${(w?.protocols || []).length} protocole(s)</strong>
       </div>
       <div class="actions">
         ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
@@ -980,6 +1017,7 @@ function shell(page, content) {
     ['settings', '✧'],
     ['guests', '♧'],
     ['seating', '▦'],
+    ['protocols', '◈'],
     ['checkin', '✓'],
     ['stats', '◔'],
     ['guestbook', '✎'],
@@ -1001,26 +1039,31 @@ function toggleOwnerPinField() {
   const role = $('#auth-role')?.value;
   const box = $('#owner-pin-box');
   if (box) {
-    box.classList.toggle('hidden', role !== 'owner' || cloudCfg.ownerUnlocked);
+    const needsPin = role === 'owner' && getRole() !== 'owner';
+    box.classList.toggle('hidden', !needsPin);
+    if (needsPin) {
+      setTimeout(() => $('#auth-pin')?.focus(), 40);
+    }
   }
 }
 
 function openAdminAuthModal() {
   const r = getRole();
-  const needsPin = r !== 'owner' && !cloudCfg.ownerUnlocked;
+  const needsPin = r !== 'owner';
   openModal('Rôle & Autorisation', `
     <div class="form-grid">
       <div class="field full">
         <label>Profil / Rôle</label>
         <select id="auth-role" onchange="toggleOwnerPinField()">
           <option value="owner" ${r === 'owner' ? 'selected' : ''}>Gestionnaire & Développeur (Vue globale & Sync)</option>
-          <option value="admin" ${r === 'admin' ? 'selected' : ''}>Administrateur (Attributions du mariage uniquement)</option>
+          <option value="admin" ${r === 'admin' ? 'selected' : ''}>Administrateur (Attributions & Équipe Protocole)</option>
           <option value="protocol" ${r === 'protocol' ? 'selected' : ''}>Protocole (Invités, Plan de salle & Accueil & QR)</option>
         </select>
       </div>
-      <div id="owner-pin-box" class="field full ${r === 'owner' && needsPin ? '' : (r === 'owner' && !cloudCfg.ownerUnlocked ? '' : 'hidden')}">
+      <div id="owner-pin-box" class="field full ${needsPin ? '' : 'hidden'}">
         <label>Code PIN Gestionnaire</label>
-        <input id="auth-pin" type="password" inputmode="numeric" maxlength="12" placeholder="Entrez le code PIN gestionnaire">
+        <input id="auth-pin" type="password" inputmode="numeric" maxlength="12" autocomplete="off" placeholder="Entrez le code PIN gestionnaire">
+        <div id="auth-pin-err" class="small" style="color:var(--red);margin-top:5px"></div>
         <div class="small" style="margin-top:5px">Protège l’accès aux menus Gestionnaire. Si vous avez oublié votre code, utilisez la récupération ci-dessous.</div>
       </div>
       <div class="field full">
@@ -1037,9 +1080,6 @@ function openAdminAuthModal() {
       <button type="button" class="btn ghost sm" onclick="recoverOwnerAccess()">Récupérer l’accès Gestionnaire</button>
     </div>
   `, 'applyAdminAuthFromModal()', 'Valider');
-  if (r === 'owner' && !cloudCfg.ownerUnlocked) {
-    $('#owner-pin-box')?.classList.remove('hidden');
-  }
 }
 
 function recoverOwnerAccess() {
@@ -1054,17 +1094,22 @@ function recoverOwnerAccess() {
 }
 
 async function applyAdminAuthFromModal() {
+  const currentR = getRole();
   const role = $('#auth-role').value;
   const email = $('#auth-email').value.trim();
   const pass = $('#auth-pass').value;
   const pinInput = ($('#auth-pin')?.value || '').trim();
 
-  if (role === 'owner' && getRole() !== 'owner' && !cloudCfg.ownerUnlocked) {
-    if (pinInput !== OWNER_PIN) {
+  if (role === 'owner' && currentR !== 'owner') {
+    if (!pinInput || pinInput !== OWNER_PIN) {
+      const errEl = $('#auth-pin-err');
+      if (errEl) errEl.textContent = 'Code PIN gestionnaire incorrect : accès refusé.';
       showToast('Code PIN gestionnaire incorrect');
       return;
     }
     cloudCfg.ownerUnlocked = true;
+  } else if (role !== 'owner') {
+    cloudCfg.ownerUnlocked = false;
   }
 
   cloudCfg.role = role;
@@ -1089,6 +1134,167 @@ async function applyAdminAuthFromModal() {
   render(nextPage);
 }
 
+/* --- GESTION & CATÉGORISATION DES PROTOCOLES --- */
+function protocolsPage() {
+  if (!canManageProtocols()) return go(getDefaultPageForRole());
+  const w = wedding();
+  if (!w) return go(getDefaultPageForRole());
+  const list = w.protocols || [];
+  const zones = PROTOCOL_ZONES[db.lang] || PROTOCOL_ZONES.fr;
+  const filtered = protocolZoneFilter === 'all'
+    ? list
+    : list.filter(p => p.zone === protocolZoneFilter);
+
+  shell('protocols', `
+    <div class="head-row">
+      <div>
+        <div class="eyebrow">${esc(w.couple)} / PROTOCOL TEAM · ${roleLabelShort().toUpperCase()}</div>
+        <h1 class="page-title">${t('protocols')}</h1>
+        <div class="sub">Enregistrez, catégorisez par mission et suivez les membres du protocole pour ce mariage.</div>
+      </div>
+      <div class="actions">
+        <button class="btn gold" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>
+        <button class="btn primary" onclick="openProtocolModal()">＋ Ajouter un protocole</button>
+      </div>
+    </div>
+
+    <div class="cards" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0">
+      <div class="stat"><div class="stat-label">Protocoles enregistrés</div><div class="stat-num">${list.length}</div></div>
+      <div class="stat"><div class="stat-label">Actifs</div><div class="stat-num">${list.filter(p => p.active !== false).length}</div></div>
+      <div class="stat"><div class="stat-label">Catégories utilisées</div><div class="stat-num">${new Set(list.map(p => p.zone)).size}</div></div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Liste et catégories des protocoles</h3>
+        <div class="filter-bar" style="margin-top:0">
+          <button class="btn sm filter-btn ${protocolZoneFilter === 'all' ? 'active' : ''}" onclick="setProtocolZoneFilter('all')">Toutes (${list.length})</button>
+          ${zones.map(z => `<button class="btn sm filter-btn ${protocolZoneFilter === z.id ? 'active' : ''}" onclick="setProtocolZoneFilter('${z.id}')">${esc(z.label)} (${list.filter(p => p.zone === z.id).length})</button>`).join('')}
+        </div>
+      </div>
+
+      ${filtered.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Nom / Équipe</th><th>Catégorie</th><th>Contact</th><th>Statut</th><th>Actions</th></tr></thead>
+        <tbody>${filtered.map(p => {
+          const isTerrain = cloudCfg.activeProtocolId === p.id;
+          return `<tr>
+            <td>
+              <strong>${esc(p.name)}</strong>
+              ${isTerrain ? `<div class="small" style="color:var(--green)">✓ Affecté terrain</div>` : ''}
+            </td>
+            <td>
+              <select onchange="updateProtocolZone('${p.id}', this.value)" style="padding:7px;border:1px solid var(--line);border-radius:5px">
+                ${zones.map(z => `<option value="${z.id}" ${p.zone === z.id ? 'selected' : ''}>${esc(z.label)}</option>`).join('')}
+              </select>
+            </td>
+            <td><span class="small">${esc(p.phone || '—')}</span></td>
+            <td>
+              <button class="btn sm" onclick="toggleProtocolActive('${p.id}')">
+                <span class="pill ${p.active !== false ? 'ok' : 'no'}">${p.active !== false ? 'Actif' : 'Inactif'}</span>
+              </button>
+            </td>
+            <td class="actions">
+              <button class="btn sm" onclick="setActiveTerrainProtocol('${p.id}')">Affecter terrain</button>
+              <button class="btn danger sm" onclick="removeProtocol('${p.id}')">✕</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>` : `<div class="empty">Aucun protocole enregistré dans cette catégorie.</div>`}
+    </section>
+  `);
+}
+
+function setProtocolZoneFilter(zone) {
+  protocolZoneFilter = zone;
+  render('protocols');
+}
+
+function openProtocolModal() {
+  if (!canManageProtocols()) return showToast('Action non autorisée');
+  const zones = PROTOCOL_ZONES[db.lang] || PROTOCOL_ZONES.fr;
+  openModal('Ajouter un protocole', `
+    <div class="form-grid">
+      <div class="field full"><label>Nom du protocole ou de l’équipe</label><input id="f-pname" placeholder="Ex. Sarah — Accueil Entrée"></div>
+      <div class="field full">
+        <label>Catégorie / Mission</label>
+        <select id="f-pzone">
+          ${zones.map(z => `<option value="${z.id}">${esc(z.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field full"><label>Téléphone (facultatif)</label><input id="f-pphone" placeholder="+243…"></div>
+    </div>
+  `, 'saveProtocol()');
+}
+
+function saveProtocol() {
+  if (!canManageProtocols()) return;
+  const name = ($('#f-pname')?.value || '').trim();
+  if (!name) {
+    showToast('Indiquez le nom du protocole');
+    return;
+  }
+  const w = wedding();
+  w.protocols = w.protocols || [];
+  const item = {
+    id: 'p-' + Date.now(),
+    name,
+    zone: $('#f-pzone')?.value || 'accueil_qr',
+    phone: ($('#f-pphone')?.value || '').trim(),
+    active: true
+  };
+  w.protocols.push(item);
+  if (!cloudCfg.activeProtocolId) {
+    cloudCfg.activeProtocolId = item.id;
+    saveCloudCfg();
+  }
+  persist();
+  closeModal();
+  showToast('Protocole enregistré');
+  render('protocols');
+}
+
+function updateProtocolZone(pid, zone) {
+  if (!canManageProtocols()) return;
+  const w = wedding();
+  const item = (w.protocols || []).find(p => p.id === pid);
+  if (item) {
+    item.zone = zone;
+    persist();
+    showToast('Catégorie mise à jour');
+    render('protocols');
+  }
+}
+
+function toggleProtocolActive(pid) {
+  if (!canManageProtocols()) return;
+  const w = wedding();
+  const item = (w.protocols || []).find(p => p.id === pid);
+  if (item) {
+    item.active = item.active === false ? true : false;
+    persist();
+    render('protocols');
+  }
+}
+
+function setActiveTerrainProtocol(pid) {
+  cloudCfg.activeProtocolId = pid;
+  saveCloudCfg();
+  showToast('Protocole affecté au terrain');
+  render('protocols');
+}
+
+function removeProtocol(pid) {
+  if (!canManageProtocols()) return;
+  const w = wedding();
+  w.protocols = (w.protocols || []).filter(p => p.id !== pid);
+  if (cloudCfg.activeProtocolId === pid) {
+    cloudCfg.activeProtocolId = w.protocols[0]?.id || '';
+    saveCloudCfg();
+  }
+  persist();
+  render('protocols');
+}
+
 function render(page) {
   try {
     const params = new URLSearchParams(location.search);
@@ -1102,6 +1308,7 @@ function render(page) {
     if (targetPage === 'settings') return settingsPage();
     if (targetPage === 'guests') return guestsPage();
     if (targetPage === 'seating') return seatingPage();
+    if (targetPage === 'protocols') return protocolsPage();
     if (targetPage === 'checkin') return checkinPage();
     if (targetPage === 'stats') return statsPage();
     if (targetPage === 'guestbook') return guestbookPage();
@@ -1156,7 +1363,7 @@ function weddingCards() {
       <div class="card-cover" ${coverStyle}>${w.photo ? esc(w.couple) : 'A day to remember'}</div>
       <div class="wedding-body">
         <h3>${esc(w.couple)}</h3>
-        <div class="meta">${w.date ? esc(w.date) : t('datePending')} · ${esc(w.venue || '')} · ${(w.guests || []).length} invité(s)</div>
+        <div class="meta">${w.date ? esc(w.date) : t('datePending')} · ${esc(w.venue || '')} · ${(w.guests || []).length} invité(s) · ${(w.protocols || []).length} protocole(s)</div>
         <div class="actions">
           ${canEditSettings() ? `<button class="btn primary sm" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button>` : ''}
           <button class="btn sm" onclick="selectWedding('${w.id}');go('guests')">${t('open')}</button>
@@ -1579,11 +1786,12 @@ function checkinPage() {
   const arrivedSeats = w.guests.filter(g => g.arrived).reduce((a, g) => a + (Number(g.seats) || 1), 0);
   const totalSeats = w.guests.reduce((a, g) => a + (Number(g.seats) || 1), 0);
   const qVal = $('#check-search') ? $('#check-search').value : '';
+  const activeProt = (w.protocols || []).find(p => p.id === cloudCfg.activeProtocolId);
 
   shell('checkin', `
     <div class="head-row">
       <div>
-        <div class="eyebrow">${esc(w.couple)} / ARRIVALS · ${roleLabelShort().toUpperCase()}</div>
+        <div class="eyebrow">${esc(w.couple)} / ARRIVALS · ${roleLabelShort().toUpperCase()}${activeProt ? ' · ' + esc(getZoneLabel(activeProt.zone)).toUpperCase() : ''}</div>
         <h1 class="page-title">${t('checkTitle')}</h1>
         <div class="sub">${t('checkHint')}</div>
       </div>
@@ -2004,6 +2212,7 @@ function saveWedding() {
     program: '',
     websiteNote: '',
     message: translations[db.lang].welcomeText,
+    protocols: [],
     tables: [],
     guests: [],
     wishes: []
@@ -2185,6 +2394,7 @@ async function fetchSupabaseInvite(wid, token) {
         dressCode: wData.dress_code || '',
         program: wData.program || '',
         websiteNote: wData.website_note || '',
+        protocols: [],
         tables: [],
         guests: guest ? [guest] : [],
         wishes: []
