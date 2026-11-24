@@ -709,6 +709,33 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
   return synced;
 }
 
+async function sendWeddingToAdmin(wid) {
+  if (!canManageWeddings()) return showToast('Action réservée au gestionnaire');
+  const w = db.weddings.find(x => x.id === wid) || wedding();
+  if (!w) return showToast('Aucun mariage sélectionné');
+  db.selected = w.id;
+  persist(false);
+  await syncDirectTablesToSupabase(w.id);
+  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(w.id) + '&role=admin';
+  shareMeta = { label: `Accès Administrateur (${w.couple})`, code: '' };
+  openModal('Envoyer à l’Administrateur', `
+    <p style="line-height:1.65;margin-top:0">
+      Partagez ce lien avec l’administrateur de <strong>${esc(w.couple)}</strong> pour lui donner l’accès à l’organisation du mariage (invités, tables, personnalisation et équipe protocole).
+    </p>
+    <div class="field"><label>Lien d’accès Administrateur (organisation du mariage)</label><input id="share-url" value="${esc(url)}" readonly></div>
+    <div class="notice">Quand l’administrateur ouvre ce lien sur son téléphone, l’espace du mariage s’ouvre directement en mode Administrateur avec les autorisations prévues.</div>
+    <div class="actions" style="margin-top:14px">
+      <button class="btn" onclick="copyShare()">⧉ ${t('copy')}</button>
+      <button class="btn gold" onclick="whatsShareAdmin()">◉ Envoyer à l’Administrateur (WhatsApp)</button>
+    </div>
+  `, 'closeModal()', 'Fermer');
+}
+
+function whatsShareAdmin() {
+  const v = $('#share-url').value;
+  window.open('https://wa.me/?text=' + encodeURIComponent('Accès Administrateur NUPTIA (organisation du mariage) : ' + v), '_blank');
+}
+
 async function sendWeddingToProtocol(wid) {
   if (!canEditSettings()) return showToast('Action non autorisée pour ce rôle');
   const w = db.weddings.find(x => x.id === wid) || wedding();
@@ -790,12 +817,12 @@ async function pullProtocolUpdates(wid) {
   }
 }
 
-async function applyProtocolUrlContext() {
+async function applyRoleUrlContext() {
   const params = new URLSearchParams(location.search);
   const wid = params.get('wedding');
   const roleParam = params.get('role');
-  if (roleParam === 'protocol') {
-    cloudCfg.role = 'protocol';
+  if (roleParam === 'protocol' || roleParam === 'admin') {
+    cloudCfg.role = roleParam;
     cloudCfg.ownerUnlocked = false;
     saveCloudCfg();
     if (wid) {
@@ -857,7 +884,8 @@ async function applyProtocolUrlContext() {
           }
         } catch (e) {}
       }
-      history.replaceState({}, '', location.pathname + '#checkin');
+      const nextHash = roleParam === 'admin' ? '#guests' : '#checkin';
+      history.replaceState({}, '', location.pathname + nextHash);
     }
   }
 }
@@ -1263,7 +1291,8 @@ function removeProtocol(pid) {
 function render(page) {
   try {
     const params = new URLSearchParams(location.search);
-    if (params.has('wedding') && params.get('role') !== 'protocol') {
+    const roleParam = params.get('role');
+    if (params.has('wedding') && roleParam !== 'protocol' && roleParam !== 'admin') {
       renderInvite(params.get('wedding'), params.get('invite'));
       return;
     }
@@ -1332,7 +1361,7 @@ function weddingCards() {
         <div class="actions">
           ${canEditSettings() ? `<button class="btn primary sm" onclick="selectWedding('${w.id}');go('settings')">Personnaliser</button>` : ''}
           <button class="btn sm" onclick="selectWedding('${w.id}');go('guests')">${t('open')}</button>
-          ${!isProtocolRole() ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Protocole</button>` : ''}
+          ${canManageWeddings() ? `<button class="btn gold sm" onclick="sendWeddingToAdmin('${w.id}')">Administrateur</button>` : ''}
           <button class="btn sm" onclick="publicLink('${w.id}')">${t('view')}</button>
           ${canManageWeddings() ? `<button class="btn danger sm" onclick="confirmDeleteWedding('${w.id}')">${t('delete')}</button>` : ''}
         </div>
@@ -2420,7 +2449,7 @@ window.addEventListener('popstate', () => {
 });
 
 (async function boot() {
-  await applyProtocolUrlContext();
+  await applyRoleUrlContext();
   await verifySupabaseConnection();
   syncDirectTablesToSupabase();
   const initialPage = location.hash.slice(1) || getDefaultPageForRole();
