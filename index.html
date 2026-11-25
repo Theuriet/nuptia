@@ -2448,5 +2448,20 @@ window.addEventListener('popstate', () => {
   render(canAccessPage(initialPage) ? initialPage : getDefaultPageForRole());
 })();
 </script>
+  <script>
+async function testSupabaseDirect() {
+  const url = "https://yreablulslmnnexoojek.supabase.co";
+  const key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyZWFibHVsc2xtbm5leG9vamVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUyNDc0MDQsImV4cCI6MjExMDgyMzQwNH0.yX2S8heJ6NEne4Me6dA4j85288OnX_KtDJ2I3M6qUkQ";
+  try {
+    const res = await fetch(`${url}/rest/v1/weddings?select=*&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    const text = await res.text();
+    alert(`HTTP ${res.status} : ${text}`);
+  } catch (err) {
+    alert(`Erreur réseau : ${err.message}`);
+  }
+}
+</script>
 </body>
 </html>
