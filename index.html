@@ -162,9 +162,8 @@ tr:last-child td{border-bottom:0}
 <script>
 const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
-const cloudCfgKey = 'nuptia_supabase_cfg';
+const cloudCfgKey = 'nuptia_supabase_cfg_v2';
 
-/* Code PIN du Gestionnaire (modifiable ici) */
 const OWNER_PIN = '2026';
 
 const PROTOCOL_ZONES = {
@@ -183,7 +182,7 @@ const PROTOCOL_ZONES = {
 };
 
 const SB_PUBLIC_URL = 'https://yreablulslmnnexoojek.supabase.co';
-const SB_PUBLIC_ANON = 'sb_publishable_3YNYOYJrO00k7VUqLfIhXw_0BFOHjN9';
+const SB_PUBLIC_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyZWFibHVsc2xtbm5leG9vamVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUyNDc0MDQsImV4cCI6MjExMDgyMzQwNH0.yX2S8heJ6NEne4Me6dA4j85288OnX_KtDJ2I3M6qUkQ';
 
 const DRESS_OPTIONS = {
   fr: [
@@ -461,8 +460,8 @@ try {
 let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, role: 'owner', ownerUnlocked: true, activeProtocolId: '' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
-  if (saved.url) cloudCfg.url = saved.url;
-  if (saved.anonKey) cloudCfg.anonKey = saved.anonKey;
+  if (saved.url && saved.url.startsWith('https://')) cloudCfg.url = saved.url.trim();
+  if (saved.anonKey && saved.anonKey.startsWith('eyJ')) cloudCfg.anonKey = saved.anonKey.trim();
   if (saved.role) cloudCfg.role = saved.role;
   if (typeof saved.ownerUnlocked === 'boolean') cloudCfg.ownerUnlocked = saved.ownerUnlocked;
   if (saved.activeProtocolId) cloudCfg.activeProtocolId = saved.activeProtocolId;
@@ -470,6 +469,7 @@ try {
 
 let supabaseClient = null;
 let supabaseOnline = false;
+let lastSupabaseError = '';
 let checkinFilter = 'all';
 let protocolZoneFilter = 'all';
 let shareMeta = { label: '', code: '' };
@@ -483,65 +483,27 @@ function getZoneLabel(zoneId) {
   return list.find(z => z.id === zoneId)?.label || 'Accueil & Contrôle QR';
 }
 
-/* --- ROLES : owner (Gestionnaire/Développeur), admin (Administrateur), protocol (Protocole) --- */
 function getRole() {
   if (cloudCfg.role === 'protocol') return 'protocol';
   if (cloudCfg.role === 'admin') return 'admin';
   return 'owner';
 }
-
-function isProtocolRole() {
-  return getRole() === 'protocol';
-}
-
-function isAdminRole() {
-  return getRole() === 'admin';
-}
-
-function isOwnerRole() {
-  return getRole() === 'owner';
-}
-
-function canSeeOverview() {
-  return isOwnerRole();
-}
-
-function canManageWeddings() {
-  return isOwnerRole();
-}
-
-function canSeeSync() {
-  return isOwnerRole();
-}
-
-function canEditSettings() {
-  return isOwnerRole() || isAdminRole();
-}
-
-function canAddOrDeleteGuests() {
-  return isOwnerRole() || isAdminRole();
-}
-
-function canManageTables() {
-  return isOwnerRole() || isAdminRole();
-}
-
-function canManageProtocols() {
-  return isOwnerRole() || isAdminRole();
-}
-
-function canSeeStatsAndGuestbook() {
-  return isOwnerRole() || isAdminRole();
-}
+function isProtocolRole() { return getRole() === 'protocol'; }
+function isAdminRole() { return getRole() === 'admin'; }
+function isOwnerRole() { return getRole() === 'owner'; }
+function canSeeOverview() { return isOwnerRole(); }
+function canManageWeddings() { return isOwnerRole(); }
+function canSeeSync() { return isOwnerRole(); }
+function canEditSettings() { return isOwnerRole() || isAdminRole(); }
+function canAddOrDeleteGuests() { return isOwnerRole() || isAdminRole(); }
+function canManageTables() { return isOwnerRole() || isAdminRole(); }
+function canManageProtocols() { return isOwnerRole() || isAdminRole(); }
+function canSeeStatsAndGuestbook() { return isOwnerRole() || isAdminRole(); }
 
 function canAccessPage(page) {
   const role = getRole();
-  if (role === 'protocol') {
-    return ['guests', 'seating', 'checkin'].includes(page);
-  }
-  if (role === 'admin') {
-    return ['settings', 'guests', 'seating', 'protocols', 'checkin', 'stats', 'guestbook'].includes(page);
-  }
+  if (role === 'protocol') return ['guests', 'seating', 'checkin'].includes(page);
+  if (role === 'admin') return ['settings', 'guests', 'seating', 'protocols', 'checkin', 'stats', 'guestbook'].includes(page);
   return ['overview', 'weddings', 'settings', 'guests', 'seating', 'protocols', 'checkin', 'stats', 'guestbook', 'sync'].includes(page);
 }
 
@@ -570,9 +532,7 @@ function mergeCloudWorkspace(remoteDb) {
       };
     });
     (lw.guests || []).forEach(lg => {
-      if (!mergedGuests.some(g => g.token === lg.token)) {
-        mergedGuests.push(lg);
-      }
+      if (!mergedGuests.some(g => g.token === lg.token)) mergedGuests.push(lg);
     });
     return {
       ...rw,
@@ -583,15 +543,9 @@ function mergeCloudWorkspace(remoteDb) {
     };
   });
   (db.weddings || []).forEach(lw => {
-    if (!mergedWeddings.some(w => w.id === lw.id)) {
-      mergedWeddings.push(lw);
-    }
+    if (!mergedWeddings.some(w => w.id === lw.id)) mergedWeddings.push(lw);
   });
-  return {
-    ...db,
-    ...remoteDb,
-    weddings: mergedWeddings
-  };
+  return { ...db, ...remoteDb, weddings: mergedWeddings };
 }
 
 function getDirectClient() {
@@ -616,14 +570,22 @@ async function verifySupabaseConnection() {
   const client = getDirectClient();
   if (!client) {
     supabaseOnline = false;
+    lastSupabaseError = 'Client Supabase non initialisé';
     updateTopSyncIndicator();
     return false;
   }
   try {
     const { error } = await client.from('weddings').select('id').limit(1);
-    supabaseOnline = !error;
+    if (error) {
+      supabaseOnline = false;
+      lastSupabaseError = error.message || 'Erreur accès table weddings';
+    } else {
+      supabaseOnline = true;
+      lastSupabaseError = '';
+    }
   } catch (e) {
     supabaseOnline = false;
+    lastSupabaseError = e.message || 'Erreur réseau';
   }
   updateTopSyncIndicator();
   return supabaseOnline;
@@ -645,7 +607,9 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
     updateTopSyncIndicator();
     return false;
   }
-  let synced = false;
+  const reachable = await verifySupabaseConnection();
+  if (!reachable) return false;
+
   try {
     const list = targetWeddingId
       ? (db.weddings || []).filter(w => w.id === targetWeddingId)
@@ -675,8 +639,10 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         .select('id')
         .maybeSingle();
 
-      if (wErr) continue;
-      synced = true;
+      if (wErr) {
+        lastSupabaseError = wErr.message;
+        continue;
+      }
       const dbWeddingId = wRow?.id;
       if (!dbWeddingId) continue;
 
@@ -699,14 +665,10 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
           }, { onConflict: 'qr_token' });
       }
     }
-  } catch (e) {}
-  if (synced) {
-    supabaseOnline = true;
-    updateTopSyncIndicator();
-  } else {
-    await verifySupabaseConnection();
+  } catch (e) {
+    lastSupabaseError = e.message || '';
   }
-  return synced;
+  return true;
 }
 
 async function sendWeddingToAdmin(wid) {
@@ -1046,9 +1008,7 @@ function toggleOwnerPinField() {
   if (box) {
     const needsPin = role === 'owner' && getRole() !== 'owner';
     box.classList.toggle('hidden', !needsPin);
-    if (needsPin) {
-      setTimeout(() => $('#auth-pin')?.focus(), 40);
-    }
+    if (needsPin) setTimeout(() => $('#auth-pin')?.focus(), 40);
   }
 }
 
@@ -1119,7 +1079,6 @@ async function applyAdminAuthFromModal() {
   render(nextPage);
 }
 
-/* --- GESTION & CATÉGORISATION DES PROTOCOLES --- */
 function protocolsPage() {
   if (!canManageProtocols()) return go(getDefaultPageForRole());
   const w = wedding();
@@ -1970,7 +1929,7 @@ function syncPage() {
       <h3>1. Connexion Supabase</h3>
       <div class="form-grid" style="margin-top:12px">
         <div class="field"><label>URL du projet Supabase</label><input id="sb-url" value="${esc(cloudCfg.url)}" placeholder="https://xxxxx.supabase.co"></div>
-        <div class="field"><label>Clé publique (anon key)</label><input id="sb-key" value="${esc(cloudCfg.anonKey)}" placeholder="sb_publishable_..."></div>
+        <div class="field"><label>Clé publique (anon key)</label><input id="sb-key" value="${esc(cloudCfg.anonKey)}" placeholder="eyJ..."></div>
       </div>
       <div class="actions" style="margin-top:12px">
         <button class="btn primary" onclick="saveSupabaseConfig()">Enregistrer et tester la connexion</button>
@@ -1978,6 +1937,7 @@ function syncPage() {
       </div>
       <div class="small" style="margin-top:10px">
         État serveur : <strong style="color:${supabaseOnline ? 'var(--green)' : 'var(--red)'}">${supabaseOnline ? 'Connecté (Supabase OK)' : 'Non connecté (Mode local)'}</strong>
+        ${lastSupabaseError ? `<div style="color:var(--red);margin-top:4px">Détail : ${esc(lastSupabaseError)}</div>` : ''}
       </div>
     </section>
 
@@ -1998,8 +1958,13 @@ async function saveSupabaseConfig() {
   cloudCfg.anonKey = $('#sb-key').value.trim();
   saveCloudCfg();
   initSupabase();
-  const ok = await syncDirectTablesToSupabase();
-  showToast(ok ? 'Connecté à Supabase et synchronisé' : 'Connexion testée : vérifiez les tables ou la clé');
+  const ok = await verifySupabaseConnection();
+  if (ok) {
+    await syncDirectTablesToSupabase();
+    showToast('Connecté à Supabase (Supabase OK)');
+  } else {
+    showToast('Connexion testée : ' + (lastSupabaseError || 'vérifiez les tables ou la clé'));
+  }
   render('sync');
 }
 
@@ -2447,21 +2412,6 @@ window.addEventListener('popstate', () => {
   const initialPage = location.hash.slice(1) || getDefaultPageForRole();
   render(canAccessPage(initialPage) ? initialPage : getDefaultPageForRole());
 })();
-</script>
-  <script>
-async function testSupabaseDirect() {
-  const url = "https://yreablulslmnnexoojek.supabase.co";
-  const key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyZWFibHVsc2xtbm5leG9vamVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUyNDc0MDQsImV4cCI6MjExMDgyMzQwNH0.yX2S8heJ6NEne4Me6dA4j85288OnX_KtDJ2I3M6qUkQ";
-  try {
-    const res = await fetch(`${url}/rest/v1/weddings?select=*&limit=1`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` }
-    });
-    const text = await res.text();
-    alert(`HTTP ${res.status} : ${text}`);
-  } catch (err) {
-    alert(`Erreur réseau : ${err.message}`);
-  }
-}
 </script>
 </body>
 </html>
