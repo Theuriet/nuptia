@@ -167,7 +167,7 @@ const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg_v2';
 
 /* Empreinte SHA-256 du code PIN Gestionnaire (2026) */
-const OWNER_PIN_HASH = '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a';
+const OWNER_PIN_HASH = 'b35a0a1b78631c9c2c9f7404954673e18502c79f06a7f9027e249b942b8e8034';
 
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
