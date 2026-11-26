@@ -600,6 +600,44 @@ function initSupabase() {
 }
 initSupabase();
 
+async function fetchWeddingExtrasFromSupabase(client, slug) {
+  if (!client || !slug) return { tables: [], wishes: [], protocols: [] };
+  const [tblRes, wishRes, protRes] = await Promise.all([
+    client.from('wedding_tables').select('*').eq('wedding_slug', slug),
+    client.from('wedding_wishes').select('*').eq('wedding_slug', slug).order('created_at', { ascending: true }),
+    client.from('wedding_protocols').select('*').eq('wedding_slug', slug)
+  ]);
+
+  const tables = Array.isArray(tblRes.data)
+    ? tblRes.data.map(r => ({
+        id: r.id,
+        name: r.name,
+        capacity: Number(r.capacity) || 8
+      }))
+    : [];
+
+  const wishes = Array.isArray(wishRes.data)
+    ? wishRes.data.map(r => ({
+        id: r.id,
+        author: r.author,
+        text: r.message,
+        createdAt: r.created_at || new Date().toISOString()
+      }))
+    : [];
+
+  const protocols = Array.isArray(protRes.data)
+    ? protRes.data.map(r => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone || '',
+        zone: r.zone || 'accueil_qr',
+        active: r.active !== false
+      }))
+    : [];
+
+  return { tables, wishes, protocols };
+}
+
 async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
   const client = getDirectClient();
   if (!client) {
@@ -643,6 +681,80 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         lastSupabaseError = wErr.message;
         continue;
       }
+
+      /* 1. Synchronisation des tables de salle (wedding_tables) */
+      const localTables = w.tables || [];
+      for (const tb of localTables) {
+        await client.from('wedding_tables').upsert({
+          id: tb.id,
+          wedding_slug: slug,
+          name: tb.name,
+          capacity: Number(tb.capacity) || 8
+        }, { onConflict: 'id' });
+      }
+      const { data: remoteTables } = await client
+        .from('wedding_tables')
+        .select('id')
+        .eq('wedding_slug', slug);
+      if (Array.isArray(remoteTables)) {
+        const localTableIds = new Set(localTables.map(tb => tb.id));
+        for (const rt of remoteTables) {
+          if (!localTableIds.has(rt.id)) {
+            await client.from('wedding_tables').delete().eq('id', rt.id);
+          }
+        }
+      }
+
+      /* 2. Synchronisation du livre d'or (wedding_wishes) */
+      const localWishes = w.wishes || [];
+      for (const wish of localWishes) {
+        await client.from('wedding_wishes').upsert({
+          id: wish.id,
+          wedding_slug: slug,
+          author: wish.author,
+          message: wish.text,
+          created_at: wish.createdAt || new Date().toISOString()
+        }, { onConflict: 'id' });
+      }
+      const { data: remoteWishes } = await client
+        .from('wedding_wishes')
+        .select('id')
+        .eq('wedding_slug', slug);
+      if (Array.isArray(remoteWishes)) {
+        const localWishIds = new Set(localWishes.map(x => x.id));
+        for (const rw of remoteWishes) {
+          if (!localWishIds.has(rw.id)) {
+            await client.from('wedding_wishes').delete().eq('id', rw.id);
+          }
+        }
+      }
+
+      /* 3. Synchronisation de l'équipe protocole (wedding_protocols) */
+      const localProtocols = w.protocols || [];
+      for (const pr of localProtocols) {
+        await client.from('wedding_protocols').upsert({
+          id: pr.id,
+          wedding_slug: slug,
+          name: pr.name,
+          phone: pr.phone || '',
+          zone: pr.zone || 'accueil_qr',
+          active: pr.active !== false
+        }, { onConflict: 'id' });
+      }
+      const { data: remoteProtocols } = await client
+        .from('wedding_protocols')
+        .select('id')
+        .eq('wedding_slug', slug);
+      if (Array.isArray(remoteProtocols)) {
+        const localProtIds = new Set(localProtocols.map(x => x.id));
+        for (const rp of remoteProtocols) {
+          if (!localProtIds.has(rp.id)) {
+            await client.from('wedding_protocols').delete().eq('id', rp.id);
+          }
+        }
+      }
+
+      /* 4. Synchronisation des invités (guests) */
       const dbWeddingId = wRow?.id;
       if (!dbWeddingId) continue;
 
@@ -745,6 +857,12 @@ async function pullProtocolUpdates(wid) {
     }
     supabaseOnline = true;
     updateTopSyncIndicator();
+    const slug = wData.slug || w.id;
+    const extras = await fetchWeddingExtrasFromSupabase(client, slug);
+    if (extras.tables.length) w.tables = extras.tables;
+    if (extras.wishes.length) w.wishes = extras.wishes;
+    if (extras.protocols.length) w.protocols = extras.protocols;
+
     const { data: gRows } = await client
       .from('guests')
       .select('*')
@@ -770,12 +888,12 @@ async function pullProtocolUpdates(wid) {
           });
         }
       });
-      persist(true);
-      showToast('Retours terrain intégrés');
-      render(location.hash.slice(1) || getDefaultPageForRole());
     }
+    persist(true);
+    showToast('Données synchronisées depuis Supabase');
+    render(location.hash.slice(1) || getDefaultPageForRole());
   } catch (e) {
-    showToast('Impossible de récupérer les retours terrain');
+    showToast('Impossible de récupérer les données cloud');
   }
 }
 
@@ -799,10 +917,12 @@ async function applyRoleUrlContext() {
             .maybeSingle();
           if (wData) {
             supabaseOnline = true;
-            let targetW = db.weddings.find(x => x.id === (wData.slug || wData.id) || x.id === wid);
+            const slug = wData.slug || wData.id;
+            const extras = await fetchWeddingExtrasFromSupabase(client, slug);
+            let targetW = db.weddings.find(x => x.id === slug || x.id === wid);
             if (!targetW) {
               targetW = {
-                id: wData.slug || wData.id,
+                id: slug,
                 couple: wData.couple_names || 'Mariage',
                 date: wData.wedding_date || '',
                 venue: wData.venue || '',
@@ -821,13 +941,17 @@ async function applyRoleUrlContext() {
                 dressCode: wData.dress_code || '',
                 program: wData.program || '',
                 websiteNote: wData.website_note || '',
-                protocols: [],
-                tables: [],
+                protocols: extras.protocols,
+                tables: extras.tables,
                 guests: [],
-                wishes: []
+                wishes: extras.wishes
               };
               db.weddings.push(targetW);
               db.selected = targetW.id;
+            } else {
+              if (extras.tables.length) targetW.tables = extras.tables;
+              if (extras.wishes.length) targetW.wishes = extras.wishes;
+              if (extras.protocols.length) targetW.protocols = extras.protocols;
             }
             const { data: gRows } = await client.from('guests').select('*').eq('wedding_id', wData.id);
             if (Array.isArray(gRows)) {
@@ -1891,6 +2015,7 @@ function guestbookPage() {
         <h1 class="page-title">${t('guestbookTitle')}</h1>
         <div class="sub">Messages laissés par vos proches depuis l’invitation numérique.</div>
       </div>
+      <button class="btn" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser les messages</button>
     </div>
     <section class="panel">
       ${wishes.length ? wishes.map(item => `
@@ -2195,6 +2320,9 @@ async function fetchSupabaseInvite(wid, token) {
       .maybeSingle();
     if (!wData) return null;
 
+    const slug = wData.slug || wData.id;
+    const extras = await fetchWeddingExtrasFromSupabase(pubClient, slug);
+
     let guest = null;
     if (token) {
       const { data: gData } = await pubClient
@@ -2219,7 +2347,7 @@ async function fetchSupabaseInvite(wid, token) {
 
     return {
       wedding: {
-        id: wData.slug || wData.id,
+        id: slug,
         couple: wData.couple_names || wData.couple || 'Mariage',
         date: wData.wedding_date || wData.date || '',
         venue: wData.venue || '',
@@ -2238,10 +2366,10 @@ async function fetchSupabaseInvite(wid, token) {
         dressCode: wData.dress_code || '',
         program: wData.program || '',
         websiteNote: wData.website_note || '',
-        protocols: [],
-        tables: [],
+        protocols: extras.protocols,
+        tables: extras.tables,
         guests: guest ? [guest] : [],
-        wishes: []
+        wishes: extras.wishes
       },
       guest
     };
@@ -2262,8 +2390,12 @@ async function renderInvite(wid, token) {
         if (!w) {
           db.weddings.push(cloudHit.wedding);
           w = cloudHit.wedding;
-        } else if (cloudHit.guest && !w.guests.some(x => x.token === cloudHit.guest.token)) {
-          w.guests.push(cloudHit.guest);
+        } else {
+          if (cloudHit.wedding.tables?.length) w.tables = cloudHit.wedding.tables;
+          if (cloudHit.wedding.wishes?.length) w.wishes = cloudHit.wedding.wishes;
+          if (cloudHit.guest && !w.guests.some(x => x.token === cloudHit.guest.token)) {
+            w.guests.push(cloudHit.guest);
+          }
         }
         g = token ? w.guests.find(x => x.token === token) : null;
       }
@@ -2372,7 +2504,7 @@ async function guestRsvp(wid, token, status) {
   renderInvite(wid, token);
 }
 
-function submitWish(wid, token) {
+async function submitWish(wid, token) {
   const w = db.weddings.find(x => x.id === wid);
   if (!w) return;
   const author = $('#wish-author').value.trim();
@@ -2381,9 +2513,22 @@ function submitWish(wid, token) {
     showToast('Indiquez votre nom et votre message');
     return;
   }
+  const wishItem = { id: 'wish-' + Date.now(), author, text, createdAt: new Date().toISOString() };
   w.wishes = w.wishes || [];
-  w.wishes.push({ id: 'wish-' + Date.now(), author, text, createdAt: new Date().toISOString() });
-  persist();
+  w.wishes.push(wishItem);
+  persist(true);
+  const pubClient = getDirectClient();
+  if (pubClient) {
+    try {
+      await pubClient.from('wedding_wishes').upsert({
+        id: wishItem.id,
+        wedding_slug: w.id,
+        author: wishItem.author,
+        message: wishItem.text,
+        created_at: wishItem.createdAt
+      }, { onConflict: 'id' });
+    } catch (e) {}
+  }
   showToast(t('wishSent'));
   renderInvite(wid, token);
 }
