@@ -469,6 +469,9 @@ try {
 
 let supabaseClient = null;
 let supabaseOnline = false;
+let realtimeActive = false;
+let realtimeChannel = null;
+let realtimeDebounceTimer = null;
 let lastSupabaseError = '';
 let checkinFilter = 'all';
 let protocolZoneFilter = 'all';
@@ -514,46 +517,15 @@ function getDefaultPageForRole() {
   return 'overview';
 }
 
-function mergeCloudWorkspace(remoteDb) {
-  if (!remoteDb || !Array.isArray(remoteDb.weddings)) return db;
-  const localMap = new Map((db.weddings || []).map(w => [w.id, w]));
-  const mergedWeddings = remoteDb.weddings.map(rw => {
-    const lw = localMap.get(rw.id);
-    if (!lw) return { ...rw, protocols: rw.protocols || [] };
-    const localGuests = new Map((lw.guests || []).map(g => [g.token, g]));
-    const mergedGuests = (rw.guests || []).map(rg => {
-      const lg = localGuests.get(rg.token);
-      if (!lg) return rg;
-      return {
-        ...rg,
-        arrived: Boolean(rg.arrived || lg.arrived),
-        status: rg.status !== 'pending' ? rg.status : lg.status,
-        tableId: rg.tableId || lg.tableId || ''
-      };
-    });
-    (lw.guests || []).forEach(lg => {
-      if (!mergedGuests.some(g => g.token === lg.token)) mergedGuests.push(lg);
-    });
-    return {
-      ...rw,
-      protocols: (rw.protocols && rw.protocols.length) ? rw.protocols : (lw.protocols || []),
-      guests: mergedGuests,
-      tables: (rw.tables && rw.tables.length) ? rw.tables : (lw.tables || []),
-      wishes: (rw.wishes && rw.wishes.length) ? rw.wishes : (lw.wishes || [])
-    };
-  });
-  (db.weddings || []).forEach(lw => {
-    if (!mergedWeddings.some(w => w.id === lw.id)) mergedWeddings.push(lw);
-  });
-  return { ...db, ...remoteDb, weddings: mergedWeddings };
-}
-
 function getDirectClient() {
   try {
     const url = (cloudCfg.url || SB_PUBLIC_URL || '').trim();
     const key = (cloudCfg.anonKey || SB_PUBLIC_ANON || '').trim();
     if (!url || !key || !window.supabase || typeof window.supabase.createClient !== 'function') return null;
-    return window.supabase.createClient(url, key);
+    if (!supabaseClient) {
+      supabaseClient = window.supabase.createClient(url, key);
+    }
+    return supabaseClient;
   } catch (e) {
     return null;
   }
@@ -563,7 +535,8 @@ function updateTopSyncIndicator() {
   const btn = $('#top-sync-btn');
   if (!btn) return;
   btn.classList.toggle('online-pill', supabaseOnline);
-  btn.innerHTML = `<span class="sync-dot ${supabaseOnline ? 'online' : ''}"></span>${supabaseOnline ? 'Supabase OK' : 'Local'}`;
+  const label = supabaseOnline ? (realtimeActive ? 'Supabase Live' : 'Supabase OK') : 'Local';
+  btn.innerHTML = `<span class="sync-dot ${supabaseOnline ? 'online' : ''}"></span>${label}`;
 }
 
 async function verifySupabaseConnection() {
@@ -592,11 +565,8 @@ async function verifySupabaseConnection() {
 }
 
 function initSupabase() {
-  try {
-    supabaseClient = getDirectClient();
-  } catch (e) {
-    supabaseClient = null;
-  }
+  supabaseClient = null;
+  getDirectClient();
 }
 initSupabase();
 
@@ -636,6 +606,161 @@ async function fetchWeddingExtrasFromSupabase(client, slug) {
     : [];
 
   return { tables, wishes, protocols };
+}
+
+/* Synchronisation bidirectionnelle : rapatrie les mises à jour Cloud -> Local sans perdre les médias locaux */
+async function pullAllWeddingsFromSupabase(silent = true) {
+  const client = getDirectClient();
+  if (!client) return false;
+  try {
+    const { data: wRows, error } = await client.from('weddings').select('*');
+    if (error || !Array.isArray(wRows)) return false;
+
+    supabaseOnline = true;
+    updateTopSyncIndicator();
+
+    for (const wData of wRows) {
+      const slug = wData.slug || wData.id;
+      if (!slug) continue;
+
+      const [extras, gRes] = await Promise.all([
+        fetchWeddingExtrasFromSupabase(client, slug),
+        client.from('guests').select('*').eq('wedding_id', wData.id)
+      ]);
+
+      const remoteGuests = Array.isArray(gRes.data)
+        ? gRes.data.map(rg => ({
+            id: rg.id || rg.qr_token,
+            name: rg.full_name,
+            phone: rg.phone || '',
+            seats: Number(rg.seats) || 1,
+            tableId: rg.table_id || '',
+            status: rg.rsvp_status || 'pending',
+            token: rg.qr_token,
+            arrived: Boolean(rg.arrived)
+          }))
+        : [];
+
+      let localW = db.weddings.find(x => x.id === slug || x.id === wData.id);
+      if (!localW) {
+        if (!isOwnerRole() && db.selected && db.selected !== slug) continue;
+        localW = {
+          id: slug,
+          couple: wData.couple_names || 'Mariage',
+          date: wData.wedding_date || '',
+          venue: wData.venue || '',
+          reception: wData.reception || wData.venue || '',
+          ceremony: wData.ceremony || '',
+          message: wData.message || '',
+          story: wData.story || '',
+          photo: '',
+          mapUrl: wData.map_url || '',
+          gpsLat: wData.gps_lat || '',
+          gpsLng: wData.gps_lng || '',
+          musicUrl: wData.music_url || '',
+          musicData: '',
+          musicName: '',
+          dressCodes: [],
+          dressCode: wData.dress_code || '',
+          program: wData.program || '',
+          websiteNote: wData.website_note || '',
+          protocols: extras.protocols,
+          tables: extras.tables,
+          guests: remoteGuests,
+          wishes: extras.wishes
+        };
+        db.weddings.push(localW);
+      } else {
+        if (wData.couple_names) localW.couple = wData.couple_names;
+        if (wData.wedding_date !== null) localW.date = wData.wedding_date || '';
+        if (wData.venue !== null) localW.venue = wData.venue || '';
+        if (wData.ceremony !== null) localW.ceremony = wData.ceremony || '';
+        if (wData.reception !== null) localW.reception = wData.reception || '';
+        if (wData.message !== null) localW.message = wData.message || localW.message;
+        if (wData.story !== null) localW.story = wData.story || '';
+        if (wData.map_url !== null) localW.mapUrl = wData.map_url || '';
+        if (wData.gps_lat !== null) localW.gpsLat = wData.gps_lat || '';
+        if (wData.gps_lng !== null) localW.gpsLng = wData.gps_lng || '';
+        if (wData.music_url !== null) localW.musicUrl = wData.music_url || '';
+        if (wData.program !== null) localW.program = wData.program || '';
+        if (wData.website_note !== null) localW.websiteNote = wData.website_note || '';
+
+        if (extras.tables.length) localW.tables = extras.tables;
+        if (extras.protocols.length) localW.protocols = extras.protocols;
+
+        if (extras.wishes.length) {
+          const wishMap = new Map((localW.wishes || []).map(x => [x.id, x]));
+          extras.wishes.forEach(rw => wishMap.set(rw.id, rw));
+          localW.wishes = Array.from(wishMap.values());
+        }
+
+        if (remoteGuests.length) {
+          const guestMap = new Map((localW.guests || []).map(x => [x.token, x]));
+          remoteGuests.forEach(rg => {
+            const existing = guestMap.get(rg.token);
+            if (existing) {
+              existing.name = rg.name || existing.name;
+              existing.phone = rg.phone || existing.phone;
+              existing.seats = rg.seats || existing.seats;
+              existing.tableId = rg.tableId !== undefined ? rg.tableId : existing.tableId;
+              existing.status = rg.status || existing.status;
+              existing.arrived = Boolean(rg.arrived);
+            } else {
+              guestMap.set(rg.token, rg);
+            }
+          });
+          localW.guests = Array.from(guestMap.values());
+        }
+      }
+    }
+
+    persist(true);
+    if (!silent) showToast('Données actualisées depuis Supabase');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function scheduleRealtimeRefresh() {
+  clearTimeout(realtimeDebounceTimer);
+  realtimeDebounceTimer = setTimeout(async () => {
+    const updated = await pullAllWeddingsFromSupabase(true);
+    if (!updated) return;
+    const params = new URLSearchParams(location.search);
+    const roleParam = params.get('role');
+    if (params.has('wedding') && roleParam !== 'protocol' && roleParam !== 'admin') {
+      renderInvite(params.get('wedding'), params.get('invite'));
+    } else if (!$('#modal-root')?.innerHTML) {
+      const currentPage = location.hash.slice(1) || getDefaultPageForRole();
+      render(canAccessPage(currentPage) ? currentPage : getDefaultPageForRole());
+    }
+  }, 450);
+}
+
+function startRealtimeSync() {
+  const client = getDirectClient();
+  if (!client) return;
+  try {
+    if (realtimeChannel) {
+      client.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+    realtimeChannel = client
+      .channel('nuptia-live-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weddings' }, scheduleRealtimeRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'guests' }, scheduleRealtimeRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wedding_tables' }, scheduleRealtimeRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wedding_wishes' }, scheduleRealtimeRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wedding_protocols' }, scheduleRealtimeRefresh)
+      .subscribe(status => {
+        realtimeActive = (status === 'SUBSCRIBED');
+        updateTopSyncIndicator();
+      });
+  } catch (e) {
+    realtimeActive = false;
+    updateTopSyncIndicator();
+  }
 }
 
 async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
@@ -682,7 +807,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         continue;
       }
 
-      /* 1. Synchronisation des tables de salle (wedding_tables) */
+      /* 1. Tables de salle (wedding_tables) */
       const localTables = w.tables || [];
       for (const tb of localTables) {
         await client.from('wedding_tables').upsert({
@@ -705,7 +830,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         }
       }
 
-      /* 2. Synchronisation du livre d'or (wedding_wishes) */
+      /* 2. Livre d'or (wedding_wishes) */
       const localWishes = w.wishes || [];
       for (const wish of localWishes) {
         await client.from('wedding_wishes').upsert({
@@ -729,7 +854,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         }
       }
 
-      /* 3. Synchronisation de l'équipe protocole (wedding_protocols) */
+      /* 3. Équipe protocole (wedding_protocols) */
       const localProtocols = w.protocols || [];
       for (const pr of localProtocols) {
         await client.from('wedding_protocols').upsert({
@@ -754,7 +879,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         }
       }
 
-      /* 4. Synchronisation des invités (guests) */
+      /* 4. Invités (guests) */
       const dbWeddingId = wRow?.id;
       if (!dbWeddingId) continue;
 
@@ -839,60 +964,10 @@ function whatsShareProtocol() {
 }
 
 async function pullProtocolUpdates(wid) {
-  const client = getDirectClient();
-  const w = db.weddings.find(x => x.id === wid) || wedding();
-  if (!client || !w) {
-    showToast('Synchronisation locale mise à jour');
-    return;
-  }
-  try {
-    const { data: wData } = await client
-      .from('weddings')
-      .select('id, slug')
-      .or(`id.eq.${w.id},slug.eq.${w.id}`)
-      .maybeSingle();
-    if (!wData) {
-      showToast('Aucune fiche trouvée sur Supabase');
-      return;
-    }
-    supabaseOnline = true;
-    updateTopSyncIndicator();
-    const slug = wData.slug || w.id;
-    const extras = await fetchWeddingExtrasFromSupabase(client, slug);
-    if (extras.tables.length) w.tables = extras.tables;
-    if (extras.wishes.length) w.wishes = extras.wishes;
-    if (extras.protocols.length) w.protocols = extras.protocols;
-
-    const { data: gRows } = await client
-      .from('guests')
-      .select('*')
-      .eq('wedding_id', wData.id);
-    if (Array.isArray(gRows) && gRows.length) {
-      const mapByToken = new Map((w.guests || []).map(g => [g.token, g]));
-      gRows.forEach(rg => {
-        const existing = mapByToken.get(rg.qr_token);
-        if (existing) {
-          existing.arrived = Boolean(rg.arrived || existing.arrived);
-          existing.status = rg.rsvp_status || existing.status;
-          existing.tableId = rg.table_id || existing.tableId || '';
-        } else {
-          w.guests.push({
-            id: rg.id || ('g-' + Date.now()),
-            name: rg.full_name,
-            phone: rg.phone || '',
-            seats: rg.seats || 1,
-            tableId: rg.table_id || '',
-            status: rg.rsvp_status || 'pending',
-            token: rg.qr_token,
-            arrived: Boolean(rg.arrived)
-          });
-        }
-      });
-    }
-    persist(true);
-    showToast('Données synchronisées depuis Supabase');
+  const ok = await pullAllWeddingsFromSupabase(false);
+  if (ok) {
     render(location.hash.slice(1) || getDefaultPageForRole());
-  } catch (e) {
+  } else {
     showToast('Impossible de récupérer les données cloud');
   }
 }
@@ -907,69 +982,7 @@ async function applyRoleUrlContext() {
     saveCloudCfg();
     if (wid) {
       db.selected = wid;
-      const client = getDirectClient();
-      if (client) {
-        try {
-          const { data: wData } = await client
-            .from('weddings')
-            .select('*')
-            .or(`id.eq.${wid},slug.eq.${wid}`)
-            .maybeSingle();
-          if (wData) {
-            supabaseOnline = true;
-            const slug = wData.slug || wData.id;
-            const extras = await fetchWeddingExtrasFromSupabase(client, slug);
-            let targetW = db.weddings.find(x => x.id === slug || x.id === wid);
-            if (!targetW) {
-              targetW = {
-                id: slug,
-                couple: wData.couple_names || 'Mariage',
-                date: wData.wedding_date || '',
-                venue: wData.venue || '',
-                reception: wData.reception || wData.venue || '',
-                ceremony: wData.ceremony || '',
-                message: wData.message || '',
-                story: wData.story || '',
-                photo: '',
-                mapUrl: wData.map_url || '',
-                gpsLat: wData.gps_lat || '',
-                gpsLng: wData.gps_lng || '',
-                musicUrl: wData.music_url || '',
-                musicData: '',
-                musicName: '',
-                dressCodes: [],
-                dressCode: wData.dress_code || '',
-                program: wData.program || '',
-                websiteNote: wData.website_note || '',
-                protocols: extras.protocols,
-                tables: extras.tables,
-                guests: [],
-                wishes: extras.wishes
-              };
-              db.weddings.push(targetW);
-              db.selected = targetW.id;
-            } else {
-              if (extras.tables.length) targetW.tables = extras.tables;
-              if (extras.wishes.length) targetW.wishes = extras.wishes;
-              if (extras.protocols.length) targetW.protocols = extras.protocols;
-            }
-            const { data: gRows } = await client.from('guests').select('*').eq('wedding_id', wData.id);
-            if (Array.isArray(gRows)) {
-              targetW.guests = gRows.map(rg => ({
-                id: rg.id || rg.qr_token,
-                name: rg.full_name,
-                phone: rg.phone || '',
-                seats: rg.seats || 1,
-                tableId: rg.table_id || '',
-                status: rg.rsvp_status || 'pending',
-                token: rg.qr_token,
-                arrived: Boolean(rg.arrived)
-              }));
-            }
-            persist(true);
-          }
-        } catch (e) {}
-      }
+      await pullAllWeddingsFromSupabase(true);
       const nextHash = roleParam === 'admin' ? '#guests' : '#checkin';
       history.replaceState({}, '', location.pathname + nextHash);
     }
@@ -1038,6 +1051,7 @@ function roleLabelShort() {
 
 function header() {
   const badge = roleLabelShort();
+  const statusLabel = supabaseOnline ? (realtimeActive ? 'Supabase Live' : 'Supabase OK') : 'Local';
   return `<header class="topbar">
     <div class="brand">
       <div class="brand-mark">N</div>
@@ -1048,7 +1062,7 @@ function header() {
     </div>
     <div class="top-actions">
       ${canSeeSync() ? `<button id="top-sync-btn" class="btn sm ${supabaseOnline ? 'online-pill' : ''}" onclick="go('sync')" title="Synchronisation">
-        <span class="sync-dot ${supabaseOnline ? 'online' : ''}"></span>${supabaseOnline ? 'Supabase OK' : 'Local'}
+        <span class="sync-dot ${supabaseOnline ? 'online' : ''}"></span>${statusLabel}
       </button>` : `<button class="btn ghost sm" onclick="openAdminAuthModal()">${badge}</button>`}
       <select class="lang" onchange="setLang(this.value)">
         <option value="fr" ${db.lang === 'fr' ? 'selected' : ''}>FR</option>
@@ -1066,7 +1080,7 @@ function bottomAuthBar() {
     const activeProt = (w?.protocols || []).find(p => p.id === cloudCfg.activeProtocolId);
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
-        <div class="small">Session terrain</div>
+        <div class="small">Session terrain · ${realtimeActive ? 'Temps réel actif' : 'Synchronisation auto'}</div>
         <strong style="font-size:13px">Mode Protocole actif${activeProt ? ' — ' + esc(activeProt.name) + ' (' + esc(getZoneLabel(activeProt.zone)) + ')' : ''}</strong>
       </div>
       <div class="actions">
@@ -1079,7 +1093,7 @@ function bottomAuthBar() {
   if (r === 'admin') {
     return `<div class="panel" style="margin-top:24px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div>
-        <div class="small">Attributions Administrateur</div>
+        <div class="small">Attributions Administrateur · ${realtimeActive ? 'Temps réel actif' : 'Synchronisation auto'}</div>
         <strong style="font-size:13px">Gestion opérationnelle du mariage${w ? ' : ' + esc(w.couple) : ''} · ${(w?.protocols || []).length} protocole(s)</strong>
       </div>
       <div class="actions">
@@ -1092,7 +1106,7 @@ function bottomAuthBar() {
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:24px">
     <div class="panel" style="margin:0;padding:16px 18px">
       <div class="small">Synchronisation Cloud</div>
-      <strong style="font-size:13px;display:block;margin:4px 0 10px">${supabaseOnline ? 'Connecté à Supabase' : 'Mode hors-ligne / Local'}</strong>
+      <strong style="font-size:13px;display:block;margin:4px 0 10px">${supabaseOnline ? (realtimeActive ? 'Connecté à Supabase (Temps réel actif)' : 'Connecté à Supabase') : 'Mode hors-ligne / Local'}</strong>
       <div class="actions">
         <button class="btn sm" onclick="go('sync')">Ouvrir Synchronisation</button>
       </div>
@@ -1194,6 +1208,7 @@ async function applyAdminAuthFromModal() {
   cloudCfg.role = role;
   saveCloudCfg();
   initSupabase();
+  startRealtimeSync();
 
   const labels = { owner: 'Gestionnaire', admin: 'Administrateur', protocol: 'Protocole' };
   showToast(`Rôle ${labels[role] || role} activé`);
@@ -2058,10 +2073,11 @@ function syncPage() {
       </div>
       <div class="actions" style="margin-top:12px">
         <button class="btn primary" onclick="saveSupabaseConfig()">Enregistrer et tester la connexion</button>
-        <button class="btn" onclick="syncDirectTablesToSupabase().then(ok => showToast(ok ? 'Données synchronisées avec Supabase' : 'Vérifiez la connexion Supabase'))">↻ Synchroniser maintenant</button>
+        <button class="btn" onclick="syncDirectTablesToSupabase().then(ok => showToast(ok ? 'Données synchronisées avec Supabase' : 'Vérifiez la connexion Supabase'))">↻ Envoyer vers Supabase</button>
+        <button class="btn" onclick="pullAllWeddingsFromSupabase(false).then(() => render('sync'))">⤓ Récupérer depuis Supabase</button>
       </div>
       <div class="small" style="margin-top:10px">
-        État serveur : <strong style="color:${supabaseOnline ? 'var(--green)' : 'var(--red)'}">${supabaseOnline ? 'Connecté (Supabase OK)' : 'Non connecté (Mode local)'}</strong>
+        État serveur : <strong style="color:${supabaseOnline ? 'var(--green)' : 'var(--red)'}">${supabaseOnline ? (realtimeActive ? 'Connecté (Supabase Live · Temps réel actif)' : 'Connecté (Supabase OK)') : 'Non connecté (Mode local)'}</strong>
         ${lastSupabaseError ? `<div style="color:var(--red);margin-top:4px">Détail : ${esc(lastSupabaseError)}</div>` : ''}
       </div>
     </section>
@@ -2085,8 +2101,10 @@ async function saveSupabaseConfig() {
   initSupabase();
   const ok = await verifySupabaseConnection();
   if (ok) {
+    await pullAllWeddingsFromSupabase(true);
     await syncDirectTablesToSupabase();
-    showToast('Connecté à Supabase (Supabase OK)');
+    startRealtimeSync();
+    showToast('Connecté à Supabase (Temps réel actif)');
   } else {
     showToast('Connexion testée : ' + (lastSupabaseError || 'vérifiez les tables ou la clé'));
   }
@@ -2112,7 +2130,7 @@ function restoreBackup(input) {
     try {
       const parsed = JSON.parse(reader.result);
       if (!Array.isArray(parsed.weddings)) throw new Error('Format invalide');
-      db = mergeCloudWorkspace(parsed);
+      db = { ...db, ...parsed };
       persist();
       showToast('Sauvegarde restaurée avec succès');
       render(getDefaultPageForRole());
@@ -2385,20 +2403,36 @@ async function renderInvite(wid, token) {
 
     if (!w || (token && !g)) {
       $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation partagée…</p></div></div>`;
-      const cloudHit = await fetchSupabaseInvite(wid, token);
-      if (cloudHit && cloudHit.wedding) {
-        if (!w) {
-          db.weddings.push(cloudHit.wedding);
-          w = cloudHit.wedding;
-        } else {
-          if (cloudHit.wedding.tables?.length) w.tables = cloudHit.wedding.tables;
-          if (cloudHit.wedding.wishes?.length) w.wishes = cloudHit.wedding.wishes;
-          if (cloudHit.guest && !w.guests.some(x => x.token === cloudHit.guest.token)) {
-            w.guests.push(cloudHit.guest);
-          }
+    }
+
+    const cloudHit = await fetchSupabaseInvite(wid, token);
+    if (cloudHit && cloudHit.wedding) {
+      if (!w) {
+        db.weddings.push(cloudHit.wedding);
+        w = cloudHit.wedding;
+      } else {
+        w.couple = cloudHit.wedding.couple || w.couple;
+        w.date = cloudHit.wedding.date || w.date;
+        w.venue = cloudHit.wedding.venue || w.venue;
+        w.ceremony = cloudHit.wedding.ceremony || w.ceremony;
+        w.reception = cloudHit.wedding.reception || w.reception;
+        w.message = cloudHit.wedding.message || w.message;
+        w.story = cloudHit.wedding.story || w.story;
+        w.mapUrl = cloudHit.wedding.mapUrl || w.mapUrl;
+        w.gpsLat = cloudHit.wedding.gpsLat || w.gpsLat;
+        w.gpsLng = cloudHit.wedding.gpsLng || w.gpsLng;
+        w.musicUrl = cloudHit.wedding.musicUrl || w.musicUrl;
+        w.program = cloudHit.wedding.program || w.program;
+        w.websiteNote = cloudHit.wedding.websiteNote || w.websiteNote;
+        if (cloudHit.wedding.tables?.length) w.tables = cloudHit.wedding.tables;
+        if (cloudHit.wedding.wishes?.length) w.wishes = cloudHit.wedding.wishes;
+        if (cloudHit.guest) {
+          const idx = w.guests.findIndex(x => x.token === cloudHit.guest.token);
+          if (idx >= 0) w.guests[idx] = { ...w.guests[idx], ...cloudHit.guest };
+          else w.guests.push(cloudHit.guest);
         }
-        g = token ? w.guests.find(x => x.token === token) : null;
       }
+      g = token ? w.guests.find(x => x.token === token) : null;
     }
 
     if (!w || (token && !g)) {
@@ -2550,10 +2584,20 @@ window.addEventListener('popstate', () => {
   render(canAccessPage(page) ? page : getDefaultPageForRole());
 });
 
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    scheduleRealtimeRefresh();
+  }
+});
+
 (async function boot() {
   await applyRoleUrlContext();
-  await verifySupabaseConnection();
-  syncDirectTablesToSupabase();
+  const ok = await verifySupabaseConnection();
+  if (ok) {
+    await pullAllWeddingsFromSupabase(true);
+    await syncDirectTablesToSupabase();
+    startRealtimeSync();
+  }
   const initialPage = location.hash.slice(1) || getDefaultPageForRole();
   render(canAccessPage(initialPage) ? initialPage : getDefaultPageForRole());
 })();
