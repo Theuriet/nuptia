@@ -128,6 +128,8 @@ tr:last-child td{border-bottom:0}
 .sync-dot.online{background:var(--green)}
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .filter-btn.active{background:var(--ink);color:white;border-color:var(--ink)}
+.scanner-box{margin-top:16px;padding:16px;border:1px solid var(--gold2);border-radius:10px;background:#fbf8f2}
+.scanner-video{width:100%;max-width:380px;border-radius:8px;background:#1c1915;display:block;margin:10px auto}
 
 @media(max-width:860px){
   .layout{grid-template-columns:1fr}
@@ -252,7 +254,7 @@ const translations = {
     addTable: 'Ajouter une table',
     tableGuests: 'Invités placés',
     checkTitle: 'Accueil rapide du jour J',
-    checkHint: 'Filtrez ou recherchez un invité / code pour valider ou annuler son entrée.',
+    checkHint: 'Scannez un QR code ou recherchez un invité / code pour valider son entrée.',
     mark: 'Valider l’entrée',
     unmark: 'Annuler entrée',
     arrived: 'Arrivé',
@@ -339,7 +341,7 @@ const translations = {
     addTable: 'Add a table',
     tableGuests: 'Guests seated',
     checkTitle: 'Event Day Fast Check-in',
-    checkHint: 'Filter or search a guest/code to check in or undo arrival.',
+    checkHint: 'Scan a QR code or search a guest/code to check in or undo arrival.',
     mark: 'Check in',
     unmark: 'Undo arrival',
     arrived: 'Arrived',
@@ -477,6 +479,126 @@ let checkinFilter = 'all';
 let protocolZoneFilter = 'all';
 let shareMeta = { label: '', code: '' };
 
+/* Scanner QR Caméra (Étape 3) */
+let qrScannerOpen = false;
+let qrStream = null;
+let qrScanTimer = null;
+let qrScannerStatus = 'Caméra inactive';
+
+function stopQrCamera() {
+  if (qrScanTimer) {
+    clearInterval(qrScanTimer);
+    qrScanTimer = null;
+  }
+  if (qrStream) {
+    qrStream.getTracks().forEach(tr => tr.stop());
+    qrStream = null;
+  }
+  qrScannerOpen = false;
+  qrScannerStatus = 'Caméra arrêtée';
+}
+
+function toggleQrScanner() {
+  if (qrScannerOpen) {
+    stopQrCamera();
+    render('checkin');
+    return;
+  }
+  qrScannerOpen = true;
+  qrScannerStatus = 'Ouverture de la caméra…';
+  render('checkin');
+  startQrCameraLoop();
+}
+
+async function startQrCameraLoop() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    qrScannerStatus = 'Caméra indisponible : saisissez ou collez le code NUP- ci-dessous.';
+    const st = $('#qr-scan-status');
+    if (st) st.textContent = qrScannerStatus;
+    return;
+  }
+  try {
+    qrStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    const videoEl = $('#qr-video');
+    if (!videoEl || !qrScannerOpen) {
+      stopQrCamera();
+      return;
+    }
+    videoEl.srcObject = qrStream;
+    await videoEl.play();
+
+    const hasDetector = typeof window.BarcodeDetector === 'function';
+    let detector = null;
+    if (hasDetector) {
+      try {
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      } catch (e) {
+        detector = null;
+      }
+    }
+
+    if (!detector) {
+      qrScannerStatus = 'Caméra active : pointez le QR code ou saisissez le code NUP- dans la recherche.';
+      const st = $('#qr-scan-status');
+      if (st) st.textContent = qrScannerStatus;
+      return;
+    }
+
+    qrScannerStatus = 'Caméra active : présentez le QR code de l’invité…';
+    const st = $('#qr-scan-status');
+    if (st) st.textContent = qrScannerStatus;
+
+    qrScanTimer = setInterval(async () => {
+      if (!qrScannerOpen || !videoEl || videoEl.readyState < 2) return;
+      try {
+        const codes = await detector.detect(videoEl);
+        if (codes && codes.length) {
+          const rawValue = (codes[0].rawValue || '').trim();
+          if (rawValue) {
+            handleScannedQrValue(rawValue);
+          }
+        }
+      } catch (e) {}
+    }, 350);
+  } catch (e) {
+    stopQrCamera();
+    qrScannerStatus = 'Accès caméra refusé ou indisponible : utilisez la recherche par code NUP-.';
+    render('checkin');
+  }
+}
+
+function handleScannedQrValue(rawVal) {
+  const w = wedding();
+  if (!w) return;
+  const clean = rawVal.trim().toUpperCase();
+  const matchToken = clean.match(/NUP-[A-Z0-9-]+/i)?.[0]?.toUpperCase() || clean;
+  const guest = (w.guests || []).find(g => (g.token || '').toUpperCase() === matchToken);
+
+  stopQrCamera();
+
+  if (!guest) {
+    showToast(`Code inconnu : ${matchToken}`);
+    render('checkin');
+    if ($('#check-search')) {
+      $('#check-search').value = matchToken;
+      drawCheckin(matchToken);
+    }
+    return;
+  }
+
+  guest.arrived = true;
+  persist();
+  render('checkin');
+  if ($('#check-search')) {
+    $('#check-search').value = guest.token;
+    drawCheckin(guest.token);
+  }
+  showToast(`Entrée validée : ${guest.name} (${guest.token})`);
+}
+
 function saveCloudCfg() {
   localStorage.setItem(cloudCfgKey, JSON.stringify(cloudCfg));
 }
@@ -608,7 +730,6 @@ async function fetchWeddingExtrasFromSupabase(client, slug) {
   return { tables, wishes, protocols };
 }
 
-/* Synchronisation bidirectionnelle : rapatrie les mises à jour Cloud -> Local sans perdre les médias locaux */
 async function pullAllWeddingsFromSupabase(silent = true) {
   const client = getDirectClient();
   if (!client) return false;
@@ -731,7 +852,7 @@ function scheduleRealtimeRefresh() {
     const roleParam = params.get('role');
     if (params.has('wedding') && roleParam !== 'protocol' && roleParam !== 'admin') {
       renderInvite(params.get('wedding'), params.get('invite'));
-    } else if (!$('#modal-root')?.innerHTML) {
+    } else if (!$('#modal-root')?.innerHTML && !qrScannerOpen) {
       const currentPage = location.hash.slice(1) || getDefaultPageForRole();
       render(canAccessPage(currentPage) ? currentPage : getDefaultPageForRole());
     }
@@ -807,7 +928,6 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         continue;
       }
 
-      /* 1. Tables de salle (wedding_tables) */
       const localTables = w.tables || [];
       for (const tb of localTables) {
         await client.from('wedding_tables').upsert({
@@ -830,7 +950,6 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         }
       }
 
-      /* 2. Livre d'or (wedding_wishes) */
       const localWishes = w.wishes || [];
       for (const wish of localWishes) {
         await client.from('wedding_wishes').upsert({
@@ -854,7 +973,6 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         }
       }
 
-      /* 3. Équipe protocole (wedding_protocols) */
       const localProtocols = w.protocols || [];
       for (const pr of localProtocols) {
         await client.from('wedding_protocols').upsert({
@@ -879,7 +997,6 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
         }
       }
 
-      /* 4. Invités (guests) */
       const dbWeddingId = wRow?.id;
       if (!dbWeddingId) continue;
 
@@ -1021,6 +1138,9 @@ function showToast(msg) {
 }
 
 function go(page) {
+  if (page !== 'checkin' && qrScannerOpen) {
+    stopQrCamera();
+  }
   const safePage = canAccessPage(page) ? page : getDefaultPageForRole();
   history.pushState({ page: safePage }, '', `#${safePage}`);
   render(safePage);
@@ -1880,6 +2000,9 @@ function checkinPage() {
         <div class="sub">${t('checkHint')}</div>
       </div>
       <div class="actions">
+        <button class="btn ${qrScannerOpen ? 'danger' : 'primary'}" onclick="toggleQrScanner()">
+          ${qrScannerOpen ? '✕ Fermer la caméra QR' : '▣ Scanner un QR code'}
+        </button>
         <button class="btn" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser les arrivées</button>
       </div>
     </div>
@@ -1889,6 +2012,15 @@ function checkinPage() {
       <div class="stat"><div class="stat-label">Personnes accueillies</div><div class="stat-num">${arrivedSeats} / ${totalSeats}</div></div>
       <div class="stat"><div class="stat-label">Restant à accueillir</div><div class="stat-num">${Math.max(0, w.guests.length - arrivedCount)}</div></div>
     </div>
+
+    ${qrScannerOpen ? `<section class="scanner-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <strong style="font-size:14px">Scanner QR Caméra</strong>
+        <button class="btn sm" onclick="stopQrCamera();render('checkin')">Arrêter</button>
+      </div>
+      <video id="qr-video" class="scanner-video" playsinline muted></video>
+      <div id="qr-scan-status" class="small" style="text-align:center;margin-top:6px">${esc(qrScannerStatus)}</div>
+    </section>` : ''}
 
     <section class="panel">
       <input id="check-search" value="${esc(qVal)}" placeholder="${t('search')}" oninput="drawCheckin(this.value)" style="width:100%;max-width:440px;padding:12px;border:1px solid var(--line);border-radius:6px">
@@ -2580,6 +2712,7 @@ function setLang(v) {
 }
 
 window.addEventListener('popstate', () => {
+  if (qrScannerOpen) stopQrCamera();
   const page = location.hash.slice(1) || getDefaultPageForRole();
   render(canAccessPage(page) ? page : getDefaultPageForRole());
 });
@@ -2587,6 +2720,8 @@ window.addEventListener('popstate', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     scheduleRealtimeRefresh();
+  } else if (qrScannerOpen) {
+    stopQrCamera();
   }
 });
 
