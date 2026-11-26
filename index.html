@@ -166,7 +166,13 @@ const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg_v2';
 
-const OWNER_PIN = '2026';
+/* Empreinte SHA-256 du code PIN Gestionnaire (2026) */
+const OWNER_PIN_HASH = '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a';
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 const PROTOCOL_ZONES = {
   fr: [
@@ -479,7 +485,6 @@ let checkinFilter = 'all';
 let protocolZoneFilter = 'all';
 let shareMeta = { label: '', code: '' };
 
-/* Scanner QR Caméra (Étape 3) */
 let qrScannerOpen = false;
 let qrStream = null;
 let qrScanTimer = null;
@@ -1314,7 +1319,8 @@ async function applyAdminAuthFromModal() {
   const pinInput = ($('#auth-pin')?.value || '').trim();
 
   if (role === 'owner' && currentR !== 'owner') {
-    if (!pinInput || pinInput !== OWNER_PIN) {
+    const inputHash = pinInput ? await sha256Hex(pinInput) : '';
+    if (!inputHash || inputHash !== OWNER_PIN_HASH) {
       const errEl = $('#auth-pin-err');
       if (errEl) errEl.textContent = 'Code PIN gestionnaire incorrect : accès refusé.';
       showToast('Code PIN gestionnaire incorrect');
