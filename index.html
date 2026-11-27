@@ -166,9 +166,6 @@ const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg_v2';
 
-/* Code PIN Gestionnaire en clair */
-const OWNER_PIN = '2026';
-
 const PROTOCOL_ZONES = {
   fr: [
     { id: 'accueil_qr', label: 'Accueil & Contrôle QR' },
@@ -460,13 +457,18 @@ try {
   w.wishes = w.wishes || [];
 });
 
-let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, role: 'owner', ownerUnlocked: true, activeProtocolId: '' };
+let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, role: 'admin', ownerUnlocked: false, activeProtocolId: '' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
   if (saved.url && saved.url.startsWith('https://')) cloudCfg.url = saved.url.trim();
   if (saved.anonKey && saved.anonKey.startsWith('eyJ')) cloudCfg.anonKey = saved.anonKey.trim();
-  if (saved.role) cloudCfg.role = saved.role;
-  if (typeof saved.ownerUnlocked === 'boolean') cloudCfg.ownerUnlocked = saved.ownerUnlocked;
+  if (saved.role === 'protocol' || saved.role === 'admin') {
+    cloudCfg.role = saved.role;
+    cloudCfg.ownerUnlocked = false;
+  } else if (saved.role === 'owner' && saved.ownerUnlocked === true) {
+    cloudCfg.role = 'owner';
+    cloudCfg.ownerUnlocked = true;
+  }
   if (saved.activeProtocolId) cloudCfg.activeProtocolId = saved.activeProtocolId;
 } catch (e) {}
 
@@ -610,8 +612,8 @@ function getZoneLabel(zoneId) {
 
 function getRole() {
   if (cloudCfg.role === 'protocol') return 'protocol';
-  if (cloudCfg.role === 'admin') return 'admin';
-  return 'owner';
+  if (cloudCfg.role === 'owner' && cloudCfg.ownerUnlocked === true) return 'owner';
+  return 'admin';
 }
 function isProtocolRole() { return getRole() === 'protocol'; }
 function isAdminRole() { return getRole() === 'admin'; }
@@ -1183,7 +1185,7 @@ function header() {
     <div class="top-actions">
       ${canSeeSync() ? `<button id="top-sync-btn" class="btn sm ${supabaseOnline ? 'online-pill' : ''}" onclick="go('sync')" title="Synchronisation">
         <span class="sync-dot ${supabaseOnline ? 'online' : ''}"></span>${statusLabel}
-      </button>` : `<button class="btn ghost sm" onclick="openAdminAuthModal()">${badge}</button>`}
+      </button>` : `<span class="pill">${badge}</span>`}
       <select class="lang" onchange="setLang(this.value)">
         <option value="fr" ${db.lang === 'fr' ? 'selected' : ''}>FR</option>
         <option value="en" ${db.lang === 'en' ? 'selected' : ''}>EN</option>
@@ -1205,7 +1207,6 @@ function bottomAuthBar() {
       </div>
       <div class="actions">
         ${w ? `<button class="btn sm" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser la liste</button>` : ''}
-        <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
       </div>
     </div>`;
   }
@@ -1218,7 +1219,6 @@ function bottomAuthBar() {
       </div>
       <div class="actions">
         ${w ? `<button class="btn gold sm" onclick="sendWeddingToProtocol('${w.id}')">Envoyer au Protocole</button>` : ''}
-        <button class="btn sm" onclick="openAdminAuthModal()">Changer de rôle</button>
       </div>
     </div>`;
   }
@@ -1258,84 +1258,6 @@ function shell(page, content) {
     </aside>
     <main class="main">${content}${bottomAuthBar()}<div class="footer">${t('adminNote')}</div></main>
   </div>`;
-}
-
-function toggleOwnerPinField() {
-  const role = $('#auth-role')?.value;
-  const box = $('#owner-pin-box');
-  if (box) {
-    const needsPin = role === 'owner' && getRole() !== 'owner';
-    box.classList.toggle('hidden', !needsPin);
-    if (needsPin) setTimeout(() => $('#auth-pin')?.focus(), 40);
-  }
-}
-
-function openAdminAuthModal() {
-  const r = getRole();
-  const needsPin = r !== 'owner';
-  openModal('Rôle & Autorisation', `
-    <div class="form-grid">
-      <div class="field full">
-        <label>Profil / Rôle</label>
-        <select id="auth-role" onchange="toggleOwnerPinField()">
-          <option value="owner" ${r === 'owner' ? 'selected' : ''}>Gestionnaire & Développeur (Vue globale & Sync)</option>
-          <option value="admin" ${r === 'admin' ? 'selected' : ''}>Administrateur (Attributions & Équipe Protocole)</option>
-          <option value="protocol" ${r === 'protocol' ? 'selected' : ''}>Protocole (Invités, Plan de salle & Accueil & QR)</option>
-        </select>
-      </div>
-      <div id="owner-pin-box" class="field full ${needsPin ? '' : 'hidden'}">
-        <label>Code PIN Gestionnaire</label>
-        <input id="auth-pin" type="password" inputmode="numeric" maxlength="12" autocomplete="off" placeholder="Entrez le code PIN gestionnaire">
-        <div id="auth-pin-err" class="small" style="color:var(--red);margin-top:5px"></div>
-        <div class="small" style="margin-top:5px">Protège l’accès aux menus Gestionnaire. Si vous avez oublié votre code, utilisez la récupération ci-dessous.</div>
-      </div>
-    </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="small">Besoin de récupérer l’accès Gestionnaire ?</span>
-      <button type="button" class="btn ghost sm" onclick="recoverOwnerAccess()">Récupérer l’accès Gestionnaire</button>
-    </div>
-  `, 'applyAdminAuthFromModal()', 'Valider');
-}
-
-function recoverOwnerAccess() {
-  cloudCfg.ownerUnlocked = true;
-  cloudCfg.role = 'owner';
-  saveCloudCfg();
-  showToast('Accès Gestionnaire récupéré');
-  closeModal();
-  const nextPage = getDefaultPageForRole();
-  history.replaceState({ page: nextPage }, '', `#${nextPage}`);
-  render(nextPage);
-}
-
-function applyAdminAuthFromModal() {
-  const currentR = getRole();
-  const role = $('#auth-role').value;
-  const pinInput = ($('#auth-pin')?.value || '').trim();
-
-  if (role === 'owner' && currentR !== 'owner') {
-    if (pinInput !== OWNER_PIN) {
-      const errEl = $('#auth-pin-err');
-      if (errEl) errEl.textContent = 'Code PIN gestionnaire incorrect : accès refusé.';
-      showToast('Code PIN gestionnaire incorrect');
-      return;
-    }
-    cloudCfg.ownerUnlocked = true;
-  } else if (role !== 'owner') {
-    cloudCfg.ownerUnlocked = false;
-  }
-
-  cloudCfg.role = role;
-  saveCloudCfg();
-  initSupabase();
-  startRealtimeSync();
-
-  const labels = { owner: 'Gestionnaire', admin: 'Administrateur', protocol: 'Protocole' };
-  showToast(`Rôle ${labels[role] || role} activé`);
-  closeModal();
-  const nextPage = getDefaultPageForRole();
-  history.replaceState({ page: nextPage }, '', `#${nextPage}`);
-  render(nextPage);
 }
 
 function protocolsPage() {
