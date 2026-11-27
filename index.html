@@ -165,6 +165,7 @@ tr:last-child td{border-bottom:0}
 const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg_v2';
+const MEDIA_BUCKET = 'nuptia-media';
 
 const PROTOCOL_ZONES = {
   fr: [
@@ -776,7 +777,7 @@ async function pullAllWeddingsFromSupabase(silent = true) {
           ceremony: wData.ceremony || '',
           message: wData.message || '',
           story: wData.story || '',
-          photo: '',
+          photo: wData.photo || '',
           mapUrl: wData.map_url || '',
           gpsLat: wData.gps_lat || '',
           gpsLng: wData.gps_lng || '',
@@ -801,6 +802,7 @@ async function pullAllWeddingsFromSupabase(silent = true) {
         if (wData.reception !== null) localW.reception = wData.reception || '';
         if (wData.message !== null) localW.message = wData.message || localW.message;
         if (wData.story !== null) localW.story = wData.story || '';
+        if (wData.photo) localW.photo = wData.photo;
         if (wData.map_url !== null) localW.mapUrl = wData.map_url || '';
         if (wData.gps_lat !== null) localW.gpsLat = wData.gps_lat || '';
         if (wData.gps_lng !== null) localW.gpsLng = wData.gps_lng || '';
@@ -914,6 +916,7 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
           reception: w.reception || null,
           message: w.message || null,
           story: w.story || null,
+          photo: (w.photo && w.photo.startsWith('http')) ? w.photo : null,
           map_url: w.mapUrl || null,
           gps_lat: w.gpsLat || null,
           gps_lng: w.gpsLng || null,
@@ -1484,7 +1487,7 @@ function weddingCards() {
   const activeW = wedding();
   return `<div class="wedding-grid">${db.weddings.map(w => {
     const isSel = activeW && activeW.id === w.id;
-    const coverStyle = w.photo ? `style="background-image:linear-gradient(#29251f55,#29251f88),url('${w.photo}');color:white"` : '';
+    const coverStyle = w.photo ? `style="background-image:linear-gradient(#29251f55,#29251f88),url('${esc(w.photo)}');color:white"` : '';
     return `<article class="wedding-card ${isSel ? 'selected' : ''}">
       <div class="card-cover" ${coverStyle}>${w.photo ? esc(w.couple) : 'A day to remember'}</div>
       <div class="wedding-body">
@@ -1573,14 +1576,14 @@ function settingsPage() {
     </div>
 
     <section class="panel">
-      <div class="panel-head"><div><h3>1. Les mariés et leur histoire</h3><div class="section-note">Photo du couple, date et message aux invités.</div></div></div>
+      <div class="panel-head"><div><h3>1. Les mariés et leur histoire</h3><div class="section-note">Photo du couple (envoyée sur Supabase Storage), date et message aux invités.</div></div></div>
       <div class="editor-grid">
         <div class="field"><label>Noms du couple</label><input id="ed-couple" value="${esc(w.couple)}"></div>
         <div class="field"><label>Date du mariage (active le compte à rebours)</label><input id="ed-date" type="date" value="${esc(w.date || '')}"></div>
         <div class="field full">
           <label>Photo des mariés (depuis le téléphone)</label>
           <input id="ed-photo" type="file" accept="image/*" onchange="previewWeddingPhoto(this)">
-          <img id="photo-preview" class="photo-preview ${w.photo ? '' : 'hidden'}" src="${w.photo || ''}" alt="Aperçu photo">
+          <img id="photo-preview" class="photo-preview ${w.photo ? '' : 'hidden'}" src="${esc(w.photo || '')}" alt="Aperçu photo">
           ${w.photo ? `<button class="btn sm" type="button" onclick="removeWeddingPhoto()" style="margin-top:8px">Retirer la photo</button>` : ''}
         </div>
         <div class="field full"><label>Histoire ou présentation du couple</label><textarea id="ed-story" placeholder="Racontez brièvement votre histoire…">${esc(w.story || '')}</textarea></div>
@@ -1606,13 +1609,13 @@ function settingsPage() {
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h3>3. Musique depuis le téléphone, Dress code & Programme</h3><div class="section-note">Choisissez un fichier audio sur votre téléphone et cochez le dress code.</div></div></div>
+      <div class="panel-head"><div><h3>3. Musique depuis le téléphone, Dress code & Programme</h3><div class="section-note">Choisissez un fichier audio sur votre téléphone (hébergé sur Supabase Storage) et cochez le dress code.</div></div></div>
       <div class="editor-grid">
         <div class="field full">
           <label>Sélectionner une musique depuis le téléphone (MP3, M4A, OGG)</label>
           <input id="ed-music-file" type="file" accept="audio/*" onchange="handleMusicFile(this)">
           <div id="music-status" class="small" style="margin-top:6px">
-            ${w.musicName ? `Fichier chargé : <strong>${esc(w.musicName)}</strong>` : 'Aucun fichier audio sélectionné depuis le téléphone.'}
+            ${w.musicName ? `Fichier enregistré : <strong>${esc(w.musicName)}</strong>` : (w.musicUrl ? 'Musique cloud active.' : 'Aucun fichier audio sélectionné depuis le téléphone.')}
           </div>
           ${(w.musicData || w.musicUrl) ? `<button class="btn sm" type="button" onclick="removeWeddingMusic()" style="margin-top:8px">Retirer la musique</button>` : ''}
         </div>
@@ -1640,8 +1643,31 @@ function settingsPage() {
 }
 
 let pendingWeddingPhoto = '';
+let pendingPhotoFile = null;
 let pendingMusicData = '';
 let pendingMusicName = '';
+let pendingMusicFile = null;
+
+async function uploadMediaToSupabase(file, folder, weddingSlug) {
+  const client = getDirectClient();
+  if (!client || !file) return '';
+  try {
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const path = `${weddingSlug}/${folder}-${Date.now()}.${ext || 'bin'}`;
+    const { error } = await client.storage
+      .from(MEDIA_BUCKET)
+      .upload(path, file, { upsert: true, contentType: file.type || undefined });
+    if (error) {
+      lastSupabaseError = error.message || 'Erreur upload Storage';
+      return '';
+    }
+    const { data } = client.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || '';
+  } catch (e) {
+    lastSupabaseError = e.message || 'Erreur réseau Storage';
+    return '';
+  }
+}
 
 function capturePhoneGps() {
   if (!navigator.geolocation) {
@@ -1666,6 +1692,7 @@ function previewWeddingPhoto(input) {
     showToast('Choisissez un fichier image');
     return;
   }
+  pendingPhotoFile = file;
   const reader = new FileReader();
   reader.onload = () => {
     const img = new Image();
@@ -1688,6 +1715,7 @@ function previewWeddingPhoto(input) {
 
 function removeWeddingPhoto() {
   pendingWeddingPhoto = '';
+  pendingPhotoFile = null;
   wedding().photo = '';
   persist();
   render('settings');
@@ -1696,23 +1724,27 @@ function removeWeddingPhoto() {
 function handleMusicFile(input) {
   const file = input.files && input.files[0];
   if (!file) return;
-  if (file.size > 4.5 * 1024 * 1024 && !supabaseClient) {
-    showToast('Audio > 4,5 Mo : utilisez un fichier plus léger ou connectez Supabase.');
+  if (file.size > 15 * 1024 * 1024) {
+    showToast('Fichier audio trop lourd (maximum 15 Mo).');
     input.value = '';
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    pendingMusicData = reader.result;
-    pendingMusicName = file.name;
-    $('#music-status').innerHTML = `Prêt à enregistrer : <strong>${esc(file.name)}</strong>`;
-  };
-  reader.readAsDataURL(file);
+  pendingMusicFile = file;
+  pendingMusicName = file.name;
+  $('#music-status').innerHTML = `Prêt à envoyer vers Supabase Storage : <strong>${esc(file.name)}</strong>`;
+  if (file.size <= 4 * 1024 * 1024) {
+    const reader = new FileReader();
+    reader.onload = () => { pendingMusicData = reader.result; };
+    reader.readAsDataURL(file);
+  } else {
+    pendingMusicData = '';
+  }
 }
 
 function removeWeddingMusic() {
   pendingMusicData = '';
   pendingMusicName = '';
+  pendingMusicFile = null;
   const w = wedding();
   w.musicData = '';
   w.musicName = '';
@@ -1721,9 +1753,11 @@ function removeWeddingMusic() {
   render('settings');
 }
 
-function saveWeddingDetails() {
+async function saveWeddingDetails() {
   if (!canEditSettings()) return showToast('Action non autorisée');
   const w = wedding();
+  showToast('Enregistrement et envoi des médias…');
+
   w.couple = $('#ed-couple').value.trim() || w.couple;
   w.date = $('#ed-date').value;
   w.story = $('#ed-story').value.trim();
@@ -1740,14 +1774,30 @@ function saveWeddingDetails() {
   w.websiteNote = $('#ed-note').value.trim();
   w.program = $('#ed-program').value.trim();
 
-  if (pendingWeddingPhoto) w.photo = pendingWeddingPhoto;
-  if (pendingMusicData) {
-    w.musicData = pendingMusicData;
-    w.musicName = pendingMusicName;
+  if (pendingPhotoFile) {
+    const cloudPhotoUrl = await uploadMediaToSupabase(pendingPhotoFile, 'photo', w.id);
+    w.photo = cloudPhotoUrl || pendingWeddingPhoto || w.photo;
+  } else if (pendingWeddingPhoto) {
+    w.photo = pendingWeddingPhoto;
   }
+
+  if (pendingMusicFile) {
+    const cloudMusicUrl = await uploadMediaToSupabase(pendingMusicFile, 'music', w.id);
+    if (cloudMusicUrl) {
+      w.musicUrl = cloudMusicUrl;
+      w.musicData = '';
+      w.musicName = pendingMusicName;
+    } else if (pendingMusicData) {
+      w.musicData = pendingMusicData;
+      w.musicName = pendingMusicName;
+    }
+  }
+
   pendingWeddingPhoto = '';
+  pendingPhotoFile = null;
   pendingMusicData = '';
   pendingMusicName = '';
+  pendingMusicFile = null;
 
   persist();
   showToast('Modifications enregistrées et synchronisées');
@@ -2115,7 +2165,7 @@ function syncPage() {
       <div>
         <div class="eyebrow">NUPTIA / CLOUD & BACKUP (GESTIONNAIRE)</div>
         <h1 class="page-title">Synchronisation & Sauvegarde</h1>
-        <div class="sub">Connexion au serveur cloud Supabase et sauvegarde manuelle de vos données.</div>
+        <div class="sub">Connexion au serveur cloud Supabase, stockage média (${MEDIA_BUCKET}) et sauvegarde manuelle.</div>
       </div>
     </div>
 
@@ -2472,6 +2522,7 @@ async function renderInvite(wid, token) {
         w.reception = cloudHit.wedding.reception || w.reception;
         w.message = cloudHit.wedding.message || w.message;
         w.story = cloudHit.wedding.story || w.story;
+        if (cloudHit.wedding.photo) w.photo = cloudHit.wedding.photo;
         w.mapUrl = cloudHit.wedding.mapUrl || w.mapUrl;
         w.gpsLat = cloudHit.wedding.gpsLat || w.gpsLat;
         w.gpsLng = cloudHit.wedding.gpsLng || w.gpsLng;
@@ -2504,7 +2555,7 @@ async function renderInvite(wid, token) {
       <div class="invite-title">${esc(w.couple.split('&')[0] || w.couple)}<div class="amp">&</div>${esc(w.couple.split('&')[1] || '')}</div>
       <div class="invite-rule"></div>
       <p class="invite-copy">${esc(w.message || t('welcomeText'))}</p>
-      ${w.photo ? `<img class="invite-photo" src="${w.photo}" alt="Photo des mariés">` : ''}
+      ${w.photo ? `<img class="invite-photo" src="${esc(w.photo)}" alt="Photo des mariés">` : ''}
       ${w.story ? `<div class="invite-extra"><h3>Notre histoire</h3><p>${esc(w.story)}</p></div>` : ''}
 
       <div class="invite-details">
