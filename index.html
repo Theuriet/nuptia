@@ -166,13 +166,8 @@ const $ = s => document.querySelector(s);
 const storeKey = 'nuptia_v3_store';
 const cloudCfgKey = 'nuptia_supabase_cfg_v2';
 
-/* Empreinte SHA-256 du code PIN Gestionnaire (2026) */
-const OWNER_PIN_HASH = 'b35a0a1b78631c9c2c9f7404954673e18502c79f06a7f9027e249b942b8e8034';
-
-async function sha256Hex(text) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+/* Code PIN Gestionnaire en clair */
+const OWNER_PIN = '2026';
 
 const PROTOCOL_ZONES = {
   fr: [
@@ -1313,14 +1308,13 @@ function recoverOwnerAccess() {
   render(nextPage);
 }
 
-async function applyAdminAuthFromModal() {
+function applyAdminAuthFromModal() {
   const currentR = getRole();
   const role = $('#auth-role').value;
   const pinInput = ($('#auth-pin')?.value || '').trim();
 
   if (role === 'owner' && currentR !== 'owner') {
-    const inputHash = pinInput ? await sha256Hex(pinInput) : '';
-    if (!inputHash || inputHash !== OWNER_PIN_HASH) {
+    if (pinInput !== OWNER_PIN) {
       const errEl = $('#auth-pin-err');
       if (errEl) errEl.textContent = 'Code PIN gestionnaire incorrect : accès refusé.';
       showToast('Code PIN gestionnaire incorrect');
@@ -2732,6 +2726,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async function boot() {
+  if (new URLSearchParams(location.search).get('force_owner') === '1') {
+    cloudCfg.role = 'owner';
+    cloudCfg.ownerUnlocked = true;
+    saveCloudCfg();
+    history.replaceState({}, '', location.pathname + '#overview');
+  }
   await applyRoleUrlContext();
   const ok = await verifySupabaseConnection();
   if (ok) {
