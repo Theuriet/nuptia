@@ -1888,6 +1888,7 @@ function guestTable(w) {
         </select>
       </td>
       <td class="actions">
+        ${canAddOrDeleteGuests() ? `<button class="btn sm" onclick="openEditGuestModal('${g.id}')" title="Modifier">✎</button>` : ''}
         ${!isProtocolRole() ? `<button class="btn sm" onclick="guestLink('${w.id}','${g.token}')" title="Partager">↗</button>` : ''}
         ${canAddOrDeleteGuests() ? `<button class="btn danger sm" onclick="removeGuest('${g.id}')" title="Supprimer">✕</button>` : `<span class="pill ${g.arrived ? 'ok' : ''}">${g.arrived ? t('arrived') : 'En attente'}</span>`}
       </td>
@@ -2407,6 +2408,67 @@ function saveGuest() {
   });
   persist();
   closeModal();
+  render('guests');
+}
+
+function openEditGuestModal(gid) {
+  if (!canAddOrDeleteGuests()) return showToast('Action non autorisée');
+  const w = wedding();
+  const g = w?.guests.find(x => x.id === gid);
+  if (!g) return;
+  openModal('Modifier l’invité', `
+    <div class="form-grid">
+      <div class="field full"><label>${t('guestName')}</label><input id="e-name" value="${esc(g.name)}"></div>
+      <div class="field"><label>${t('email')}</label><input id="e-phone" value="${esc(g.phone || '')}" placeholder="+243…"></div>
+      <div class="field"><label>${t('seats')}</label><input id="e-seats" type="number" min="1" max="20" value="${Number(g.seats) || 1}"></div>
+      <div class="field"><label>${t('table')}</label>
+        <select id="e-table">
+          <option value="">${t('notAssigned')}</option>
+          ${(w.tables || []).map(tb => `<option value="${tb.id}" ${g.tableId === tb.id ? 'selected' : ''}>${esc(tb.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>${t('status')}</label>
+        <select id="e-status">
+          <option value="pending" ${g.status === 'pending' ? 'selected' : ''}>${t('pending')}</option>
+          <option value="confirmed" ${g.status === 'confirmed' ? 'selected' : ''}>${t('confirmed')}</option>
+          <option value="declined" ${g.status === 'declined' ? 'selected' : ''}>${t('declined')}</option>
+        </select>
+      </div>
+    </div>
+    <p class="notice">Code d’invitation conservé : <strong>${esc(g.token)}</strong></p>
+  `, `saveEditedGuest('${g.id}')`);
+}
+
+function saveEditedGuest(gid) {
+  if (!canAddOrDeleteGuests()) return;
+  const w = wedding();
+  const g = w?.guests.find(x => x.id === gid);
+  if (!g) return;
+  const name = ($('#e-name')?.value || '').trim();
+  if (!name) {
+    showToast('Indiquez le nom de l’invité');
+    return;
+  }
+  const seats = Math.max(1, Number($('#e-seats')?.value) || 1);
+  const tableId = $('#e-table')?.value || '';
+  if (tableId) {
+    const tb = (w.tables || []).find(x => x.id === tableId);
+    if (tb) {
+      const used = w.guests.filter(x => x.tableId === tableId && x.id !== gid).reduce((a, x) => a + (Number(x.seats) || 1), 0);
+      if (used + seats > tb.capacity) {
+        showToast('Capacité de la table dépassée');
+        return;
+      }
+    }
+  }
+  g.name = name;
+  g.phone = ($('#e-phone')?.value || '').trim();
+  g.seats = seats;
+  g.tableId = tableId;
+  g.status = $('#e-status')?.value || 'pending';
+  persist();
+  closeModal();
+  showToast('Invité mis à jour');
   render('guests');
 }
 
