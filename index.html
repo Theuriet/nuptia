@@ -229,7 +229,7 @@ const translations = {
     open: 'Gérer',
     view: 'Voir invitation',
     datePending: 'Date à définir',
-    adminNote: 'NUPTIA V3 · Gestionnaire, Administrateur & Protocole.',
+    adminNote: 'NUPTIA V3 · Administrateur & Protocole.',
     createTitle: 'Créer un espace de mariage',
     couple: 'Noms du couple',
     date: 'Date du mariage',
@@ -316,7 +316,7 @@ const translations = {
     open: 'Manage',
     view: 'View invitation',
     datePending: 'Date to be confirmed',
-    adminNote: 'NUPTIA V3 · Owner, Admin & Protocol roles.',
+    adminNote: 'NUPTIA V3 · Admin & Protocol roles.',
     createTitle: 'Create a wedding space',
     couple: 'Couple’s names',
     date: 'Wedding date',
@@ -460,6 +460,7 @@ try {
   w.wishes = w.wishes || [];
 });
 
+// Mode par défaut : Administrateur (le mode Gestionnaire est masqué par défaut)
 let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, role: 'admin', ownerUnlocked: false, activeProtocolId: '' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
@@ -468,9 +469,10 @@ try {
   if (saved.role === 'protocol' || saved.role === 'admin') {
     cloudCfg.role = saved.role;
     cloudCfg.ownerUnlocked = false;
-  } else if (saved.role === 'owner' && saved.ownerUnlocked === true) {
-    cloudCfg.role = 'owner';
-    cloudCfg.ownerUnlocked = true;
+  } else {
+    // Masquer les tâches du gestionnaire par défaut après installation / ouverture
+    cloudCfg.role = 'admin';
+    cloudCfg.ownerUnlocked = false;
   }
   if (saved.activeProtocolId) cloudCfg.activeProtocolId = saved.activeProtocolId;
 } catch (e) {}
@@ -621,6 +623,8 @@ function getRole() {
 function isProtocolRole() { return getRole() === 'protocol'; }
 function isAdminRole() { return getRole() === 'admin'; }
 function isOwnerRole() { return getRole() === 'owner'; }
+
+// Toutes les fonctions gestionnaire sont masquées tant que ownerUnlocked n'est pas activé explicitement
 function canSeeOverview() { return isOwnerRole(); }
 function canManageWeddings() { return isOwnerRole(); }
 function canSeeSync() { return isOwnerRole(); }
@@ -807,7 +811,7 @@ async function pullAllWeddingsFromSupabase(silent = true) {
         if (wData.photo) localW.photo = wData.photo;
         if (wData.map_url !== null) localW.mapUrl = wData.map_url || '';
         if (wData.gps_lat !== null) localW.gpsLat = wData.gps_lat || '';
-        if (wData.gpsLng !== null) localW.gpsLng = wData.gps_lng || '';
+        if (wData.gps_lng !== null) localW.gpsLng = wData.gps_lng || '';
         if (wData.music_url !== null) localW.musicUrl = wData.music_url || '';
         if (wData.program !== null) localW.program = wData.program || '';
         if (wData.website_note !== null) localW.websiteNote = wData.website_note || '';
@@ -1187,8 +1191,8 @@ function formatDressCode(w) {
 function roleLabelShort() {
   const r = getRole();
   if (r === 'protocol') return 'Protocole';
-  if (r === 'admin') return 'Administrateur';
-  return 'Gestionnaire';
+  if (r === 'owner') return 'Gestionnaire';
+  return 'Administrateur';
 }
 
 function header() {
@@ -2750,6 +2754,10 @@ document.addEventListener('visibilitychange', () => {
     cloudCfg.ownerUnlocked = true;
     saveCloudCfg();
     history.replaceState({}, '', location.pathname + '#overview');
+  } else {
+    cloudCfg.role = 'admin';
+    cloudCfg.ownerUnlocked = false;
+    saveCloudCfg();
   }
   await applyRoleUrlContext();
   const ok = await verifySupabaseConnection();
