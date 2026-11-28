@@ -460,7 +460,6 @@ try {
   w.wishes = w.wishes || [];
 });
 
-// Mode par défaut : Administrateur (le mode Gestionnaire est masqué par défaut)
 let cloudCfg = { url: SB_PUBLIC_URL, anonKey: SB_PUBLIC_ANON, role: 'admin', ownerUnlocked: false, activeProtocolId: '' };
 try {
   const saved = JSON.parse(localStorage.getItem(cloudCfgKey) || '{}');
@@ -470,7 +469,6 @@ try {
     cloudCfg.role = saved.role;
     cloudCfg.ownerUnlocked = false;
   } else {
-    // Masquer les tâches du gestionnaire par défaut après installation / ouverture
     cloudCfg.role = 'admin';
     cloudCfg.ownerUnlocked = false;
   }
@@ -624,7 +622,6 @@ function isProtocolRole() { return getRole() === 'protocol'; }
 function isAdminRole() { return getRole() === 'admin'; }
 function isOwnerRole() { return getRole() === 'owner'; }
 
-// Toutes les fonctions gestionnaire sont masquées tant que ownerUnlocked n'est pas activé explicitement
 function canSeeOverview() { return isOwnerRole(); }
 function canManageWeddings() { return isOwnerRole(); }
 function canSeeSync() { return isOwnerRole(); }
@@ -2483,13 +2480,22 @@ function renderCountdown(dateStr) {
 
 async function fetchSupabaseInvite(wid, token) {
   const pubClient = getDirectClient();
-  if (!pubClient) return null;
+  if (!pubClient || !wid) return null;
   try {
-    const { data: wData } = await pubClient
+    let { data: wData } = await pubClient
       .from('weddings')
       .select('*')
-      .or(`id.eq.${wid},slug.eq.${wid}`)
+      .eq('slug', wid)
       .maybeSingle();
+
+    if (!wData && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(wid)) {
+      const byId = await pubClient
+        .from('weddings')
+        .select('*')
+        .eq('id', wid)
+        .maybeSingle();
+      wData = byId.data;
+    }
     if (!wData) return null;
 
     const slug = wData.slug || wData.id;
@@ -2591,7 +2597,7 @@ async function renderInvite(wid, token) {
     }
 
     if (!w || (token && !g)) {
-      $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;
+      $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><p class="invite-copy">Vérifiez le lien d’invitation reçu ou contactez les organisateurs.</p></div></div>`;
       return;
     }
 
@@ -2673,7 +2679,7 @@ async function renderInvite(wid, token) {
       });
     }
   } catch (e) {
-    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><a href="${location.pathname}">${t('back')}</a></div></div>`;
+    $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><p class="invite-copy">Vérifiez le lien d’invitation reçu ou contactez les organisateurs.</p></div></div>`;
   }
 }
 
