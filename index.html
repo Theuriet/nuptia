@@ -1073,19 +1073,21 @@ function whatsShareAdmin() {
   window.open('https://wa.me/?text=' + encodeURIComponent('Accès Administrateur NUPTIA (organisation du mariage) : ' + v), '_blank');
 }
 
-async function sendWeddingToProtocol(wid) {
+function sendWeddingToProtocol(wid) {
   if (!canEditSettings()) return showToast('Action non autorisée pour ce rôle');
   const w = db.weddings.find(x => x.id === wid) || wedding();
   if (!w) return showToast('Aucun mariage sélectionné');
   db.selected = w.id;
-  persist(false);
-  await syncDirectTablesToSupabase(w.id);
+  persist(true);
+
   const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(w.id) + '&role=protocol';
   shareMeta = { label: `Accès Protocole (${w.couple})`, code: '' };
+
   openModal('Envoyer au Protocole', `
     <p style="line-height:1.65;margin-top:0">
       Les invités, places, tables et codes de <strong>${esc(w.couple)}</strong> sont prêts pour l’équipe Protocole (${(w.protocols || []).length} membre(s) enregistré(s)).
     </p>
+    <div id="proto-sync-status" class="small" style="color:var(--gold);margin-bottom:10px">↻ Synchronisation avec le serveur en cours…</div>
     <div class="field"><label>Lien d’accès Protocole (jour J)</label><input id="share-url" value="${esc(url)}" readonly></div>
     <div class="notice">Quand l’équipe protocole ouvre ce lien sur son téléphone, elle accède uniquement à l’accueil terrain et au placement.</div>
     <div class="actions" style="margin-top:14px">
@@ -1094,6 +1096,16 @@ async function sendWeddingToProtocol(wid) {
       <button class="btn" onclick="pullProtocolUpdates('${w.id}')">↻ Actualiser retours terrain</button>
     </div>
   `, 'closeModal()', 'Fermer');
+
+  syncDirectTablesToSupabase(w.id).then(ok => {
+    const st = $('#proto-sync-status');
+    if (st) {
+      st.style.color = ok ? 'var(--green)' : 'var(--muted)';
+      st.textContent = ok
+        ? '✓ Données synchronisées sur Supabase'
+        : '• Lien prêt (synchronisation locale / hors-ligne)';
+    }
+  }).catch(() => {});
 }
 
 function whatsShareProtocol() {
