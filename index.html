@@ -2512,19 +2512,19 @@ function saveTable() {
 }
 
 async function guestLink(wid, token) {
-  await syncDirectTablesToSupabase(wid, token);
-  const w = db.weddings.find(x => x.id === wid);
+  const w = db.weddings.find(x => x.id === wid) || wedding();
   const g = w?.guests.find(x => x.token === token);
   shareMeta = { label: g ? g.name : 'Invité', code: token };
-  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid) + '&invite=' + encodeURIComponent(token);
+  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(w.id) + '&invite=' + encodeURIComponent(token);
+  await syncDirectTablesToSupabase(w.id, token);
   openShare(url);
 }
 
 async function publicLink(wid) {
-  await syncDirectTablesToSupabase(wid);
-  const w = db.weddings.find(x => x.id === wid);
+  const w = db.weddings.find(x => x.id === wid) || wedding();
   shareMeta = { label: w ? w.couple : 'Invitation', code: '' };
-  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(wid);
+  const url = location.origin + location.pathname + '?wedding=' + encodeURIComponent(w.id);
+  await syncDirectTablesToSupabase(w.id);
   openShare(url);
 }
 
@@ -2570,17 +2570,20 @@ async function fetchSupabaseInvite(wid, token) {
   const pubClient = getDirectClient();
   if (!pubClient || !wid) return null;
   try {
+    const cleanWid = String(wid).trim();
+    const cleanToken = String(token || '').trim().toUpperCase();
+
     let { data: wData } = await pubClient
       .from('weddings')
       .select('*')
-      .eq('slug', wid)
+      .ilike('slug', cleanWid)
       .maybeSingle();
 
-    if (!wData && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(wid)) {
+    if (!wData && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanWid)) {
       const byId = await pubClient
         .from('weddings')
         .select('*')
-        .eq('id', wid)
+        .eq('id', cleanWid)
         .maybeSingle();
       wData = byId.data;
     }
@@ -2590,12 +2593,12 @@ async function fetchSupabaseInvite(wid, token) {
     const extras = await fetchWeddingExtrasFromSupabase(pubClient, slug);
 
     let guest = null;
-    if (token) {
+    if (cleanToken) {
       const { data: gData } = await pubClient
         .from('guests')
         .select('*')
         .eq('wedding_id', wData.id)
-        .eq('qr_token', token)
+        .ilike('qr_token', cleanToken)
         .maybeSingle();
       if (gData) {
         guest = {
@@ -2646,45 +2649,47 @@ async function fetchSupabaseInvite(wid, token) {
 
 async function renderInvite(wid, token) {
   try {
-    let w = db.weddings.find(x => x.id === wid);
-    let g = token && w ? w.guests.find(x => x.token === token) : null;
+    const cleanWid = (wid || '').trim();
+    const cleanToken = (token || '').trim();
 
-    if (!w || (token && !g)) {
+    let w = cleanWid ? db.weddings.find(x => x.id === cleanWid) : wedding();
+    let g = (cleanToken && w) ? w.guests.find(x => x.token === cleanToken) : null;
+
+    if (cleanWid && (!w || (cleanToken && !g))) {
       $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><p class="invite-copy">Chargement de votre invitation partagée…</p></div></div>`;
-    }
-
-    const cloudHit = await fetchSupabaseInvite(wid, token);
-    if (cloudHit && cloudHit.wedding) {
-      if (!w) {
-        db.weddings.push(cloudHit.wedding);
-        w = cloudHit.wedding;
-      } else {
-        w.couple = cloudHit.wedding.couple || w.couple;
-        w.date = cloudHit.wedding.date || w.date;
-        w.venue = cloudHit.wedding.venue || w.venue;
-        w.ceremony = cloudHit.wedding.ceremony || w.ceremony;
-        w.reception = cloudHit.wedding.reception || w.reception;
-        w.message = cloudHit.wedding.message || w.message;
-        w.story = cloudHit.wedding.story || w.story;
-        if (cloudHit.wedding.photo) w.photo = cloudHit.wedding.photo;
-        w.mapUrl = cloudHit.wedding.mapUrl || w.mapUrl;
-        w.gpsLat = cloudHit.wedding.gpsLat || w.gpsLat;
-        w.gpsLng = cloudHit.wedding.gpsLng || w.gpsLng;
-        w.musicUrl = cloudHit.wedding.musicUrl || w.musicUrl;
-        w.program = cloudHit.wedding.program || w.program;
-        w.websiteNote = cloudHit.wedding.websiteNote || w.websiteNote;
-        if (cloudHit.wedding.tables?.length) w.tables = cloudHit.wedding.tables;
-        if (cloudHit.wedding.wishes?.length) w.wishes = cloudHit.wedding.wishes;
-        if (cloudHit.guest) {
-          const idx = w.guests.findIndex(x => x.token === cloudHit.guest.token);
-          if (idx >= 0) w.guests[idx] = { ...w.guests[idx], ...cloudHit.guest };
-          else w.guests.push(cloudHit.guest);
+      const cloudHit = await fetchSupabaseInvite(cleanWid, cleanToken);
+      if (cloudHit && cloudHit.wedding) {
+        if (!w) {
+          db.weddings.push(cloudHit.wedding);
+          w = cloudHit.wedding;
+        } else {
+          w.couple = cloudHit.wedding.couple || w.couple;
+          w.date = cloudHit.wedding.date || w.date;
+          w.venue = cloudHit.wedding.venue || w.venue;
+          w.ceremony = cloudHit.wedding.ceremony || w.ceremony;
+          w.reception = cloudHit.wedding.reception || w.reception;
+          w.message = cloudHit.wedding.message || w.message;
+          w.story = cloudHit.wedding.story || w.story;
+          if (cloudHit.wedding.photo) w.photo = cloudHit.wedding.photo;
+          w.mapUrl = cloudHit.wedding.mapUrl || w.mapUrl;
+          w.gpsLat = cloudHit.wedding.gpsLat || w.gpsLat;
+          w.gpsLng = cloudHit.wedding.gpsLng || w.gpsLng;
+          w.musicUrl = cloudHit.wedding.musicUrl || w.musicUrl;
+          w.program = cloudHit.wedding.program || w.program;
+          w.websiteNote = cloudHit.wedding.websiteNote || w.websiteNote;
+          if (cloudHit.wedding.tables?.length) w.tables = cloudHit.wedding.tables;
+          if (cloudHit.wedding.wishes?.length) w.wishes = cloudHit.wedding.wishes;
+          if (cloudHit.guest) {
+            const idx = w.guests.findIndex(x => x.token === cloudHit.guest.token);
+            if (idx >= 0) w.guests[idx] = { ...w.guests[idx], ...cloudHit.guest };
+            else w.guests.push(cloudHit.guest);
+          }
         }
+        g = cleanToken ? w.guests.find(x => x.token === cleanToken) : null;
       }
-      g = token ? w.guests.find(x => x.token === token) : null;
     }
 
-    if (!w || (token && !g)) {
+    if (!w || (cleanToken && !g)) {
       $('#app').innerHTML = `<div class="invite-page"><div class="invite-card"><h1 class="invite-title">${t('notFound')}</h1><p class="invite-copy">Vérifiez le lien d’invitation reçu ou contactez les organisateurs.</p></div></div>`;
       return;
     }
@@ -2743,7 +2748,7 @@ async function renderInvite(wid, token) {
         <h3>${t('guestbookTitle')}</h3>
         <div class="field" style="margin-bottom:8px"><input id="wish-author" value="${g ? esc(g.name) : ''}" placeholder="${t('yourName')}"></div>
         <div class="field" style="margin-bottom:8px"><textarea id="wish-text" style="min-height:70px" placeholder="${t('yourWish')}"></textarea></div>
-        <button class="btn gold sm" onclick="submitWish('${w.id}','${token || ''}')">${t('sendWish')}</button>
+        <button class="btn gold sm" onclick="submitWish('${w.id}','${cleanToken}')">${t('sendWish')}</button>
         <div style="margin-top:14px">
           ${(w.wishes || []).slice().reverse().map(item => `<div class="guestbook-item"><strong>${esc(item.author)}</strong><p style="margin:4px 0 0">${esc(item.text)}</p></div>`).join('')}
         </div>
@@ -2752,7 +2757,7 @@ async function renderInvite(wid, token) {
       <div class="invite-rule"></div>
       <div class="small">NUPTIA · Chaque union mérite une belle invitation.</div>
       <div style="margin-top:16px">
-        <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${w.id}','${token || ''}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
+        <button class="lang" onclick="setLang('${db.lang === 'fr' ? 'en' : 'fr'}');renderInvite('${w.id}','${cleanToken}')">${db.lang === 'fr' ? 'English' : 'Français'}</button>
       </div>
     </article></div>`;
 
