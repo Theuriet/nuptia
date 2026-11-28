@@ -816,10 +816,8 @@ async function pullAllWeddingsFromSupabase(silent = true) {
         if (extras.tables.length) localW.tables = extras.tables;
         if (extras.protocols.length) localW.protocols = extras.protocols;
 
-        if (extras.wishes.length) {
-          const wishMap = new Map((localW.wishes || []).map(x => [x.id, x]));
-          extras.wishes.forEach(rw => wishMap.set(rw.id, rw));
-          localW.wishes = Array.from(wishMap.values());
+        if (Array.isArray(extras.wishes)) {
+          localW.wishes = extras.wishes;
         }
 
         if (remoteGuests.length) {
@@ -2197,12 +2195,28 @@ function guestbookPage() {
   `);
 }
 
-function deleteWish(wid) {
+async function deleteWish(wid) {
   if (!canSeeStatsAndGuestbook()) return;
   const w = wedding();
+  if (!w) return;
   w.wishes = (w.wishes || []).filter(x => x.id !== wid);
-  persist();
+  persist(true);
   render('guestbook');
+
+  const client = getDirectClient();
+  if (client) {
+    try {
+      const { error } = await client.from('wedding_wishes').delete().eq('id', wid);
+      if (error) {
+        lastSupabaseError = error.message;
+        showToast('Suppression cloud refusée : vérifiez les droits DELETE sur wedding_wishes');
+        return;
+      }
+    } catch (e) {
+      lastSupabaseError = e.message || '';
+    }
+  }
+  showToast('Message supprimé');
 }
 
 function syncPage() {
