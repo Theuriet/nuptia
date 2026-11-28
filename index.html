@@ -807,7 +807,7 @@ async function pullAllWeddingsFromSupabase(silent = true) {
         if (wData.photo) localW.photo = wData.photo;
         if (wData.map_url !== null) localW.mapUrl = wData.map_url || '';
         if (wData.gps_lat !== null) localW.gpsLat = wData.gps_lat || '';
-        if (wData.gps_lng !== null) localW.gpsLng = wData.gps_lng || '';
+        if (wData.gpsLng !== null) localW.gpsLng = wData.gps_lng || '';
         if (wData.music_url !== null) localW.musicUrl = wData.music_url || '';
         if (wData.program !== null) localW.program = wData.program || '';
         if (wData.website_note !== null) localW.websiteNote = wData.website_note || '';
@@ -1024,6 +1024,21 @@ async function syncDirectTablesToSupabase(targetWeddingId, targetToken) {
             rsvp_status: g.status || 'pending',
             arrived: Boolean(g.arrived)
           }, { onConflict: 'qr_token' });
+      }
+
+      if (!targetToken) {
+        const { data: remoteGuests } = await client
+          .from('guests')
+          .select('qr_token')
+          .eq('wedding_id', dbWeddingId);
+        if (Array.isArray(remoteGuests)) {
+          const localTokens = new Set((w.guests || []).map(g => g.token));
+          for (const rg of remoteGuests) {
+            if (rg.qr_token && !localTokens.has(rg.qr_token)) {
+              await client.from('guests').delete().eq('qr_token', rg.qr_token);
+            }
+          }
+        }
       }
     }
   } catch (e) {
@@ -1755,6 +1770,15 @@ function removeWeddingMusic() {
   render('settings');
 }
 
+function dataUrlToBlob(dataUrl) {
+  const parts = dataUrl.split(',');
+  const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const bin = atob(parts[1]);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
 async function saveWeddingDetails() {
   if (!canEditSettings()) return showToast('Action non autorisée');
   const w = wedding();
@@ -1776,11 +1800,19 @@ async function saveWeddingDetails() {
   w.websiteNote = $('#ed-note').value.trim();
   w.program = $('#ed-program').value.trim();
 
-  if (pendingPhotoFile) {
-    const cloudPhotoUrl = await uploadMediaToSupabase(pendingPhotoFile, 'photo', w.id);
-    w.photo = cloudPhotoUrl || pendingWeddingPhoto || w.photo;
-  } else if (pendingWeddingPhoto) {
-    w.photo = pendingWeddingPhoto;
+  let mediaWarning = '';
+
+  if (pendingWeddingPhoto || pendingPhotoFile) {
+    const fileToUpload = pendingWeddingPhoto
+      ? new File([dataUrlToBlob(pendingWeddingPhoto)], 'cover.jpg', { type: 'image/jpeg' })
+      : pendingPhotoFile;
+    const cloudPhotoUrl = await uploadMediaToSupabase(fileToUpload, 'photo', w.id);
+    if (cloudPhotoUrl) {
+      w.photo = cloudPhotoUrl;
+    } else {
+      w.photo = pendingWeddingPhoto || w.photo;
+      mediaWarning = 'Photo gardée en local (vérifiez le bucket Supabase nuptia-media).';
+    }
   }
 
   if (pendingMusicFile) {
@@ -1789,9 +1821,12 @@ async function saveWeddingDetails() {
       w.musicUrl = cloudMusicUrl;
       w.musicData = '';
       w.musicName = pendingMusicName;
-    } else if (pendingMusicData) {
+    } else if (pendingMusicData && pendingMusicData.length < 1500000) {
       w.musicData = pendingMusicData;
       w.musicName = pendingMusicName;
+      mediaWarning = 'Musique gardée en local (bucket Storage non accessible).';
+    } else {
+      mediaWarning = 'Échec upload musique : vérifiez le bucket nuptia-media ou utilisez un lien MP3.';
     }
   }
 
@@ -1802,7 +1837,7 @@ async function saveWeddingDetails() {
   pendingMusicFile = null;
 
   persist();
-  showToast('Modifications enregistrées et synchronisées');
+  showToast(mediaWarning || 'Modifications enregistrées et synchronisées');
   render('settings');
 }
 
@@ -1870,12 +1905,21 @@ function changeGuestStatus(gid, status) {
   }
 }
 
-function removeGuest(gid) {
+async function removeGuest(gid) {
   if (!canAddOrDeleteGuests()) return showToast('Suppression non autorisée');
   const w = wedding();
+  const target = w.guests.find(g => g.id === gid);
   w.guests = w.guests.filter(g => g.id !== gid);
-  persist();
+  persist(true);
   render('guests');
+
+  if (target && target.token) {
+    const client = getDirectClient();
+    if (client) {
+      await client.from('guests').delete().eq('qr_token', target.token);
+    }
+  }
+  showToast('Invité supprimé');
 }
 
 function filterGuests(q) {
